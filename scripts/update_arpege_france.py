@@ -171,13 +171,21 @@ CONDITION_CODES = {
     9: "windy",
 }
 
+# Les paquets ARPEGE réels ne sont pas un fichier par échéance : chaque
+# paquet couvre une PLAGE d'échéances (ex. 000H012H = +0 h à +12 h, avec un
+# pas d'1 h jusqu'à +48 h puis 3 h au-delà) et regroupe plusieurs paramètres
+# GRIB2 dans un seul fichier. Vérifié le 2026-09-04 contre le vrai catalogue
+# data.gouv.fr : le nom réel est
+# ``arpege__01__SP1__000H012H__2026-09-04T12:00:00Z.grib2`` (et non un
+# format ``__NNH__`` par échéance unique comme initialement supposé).
 RESOURCE_RE = re.compile(
-    r"^arpege__01__(?P<group>SP1|SP2|HP1|IP1)__"
-    r"(?P<lead>\d{2})H__(?P<run>.+)\.grib2$",
+    r"^arpege__01__(?P<group>SP1|SP2|HP1|HP2|IP1|IP2|IP3|IP4)__"
+    r"(?P<lead_start>\d{3})H(?P<lead_end>\d{3})H__(?P<run>.+)\.grib2$",
     re.IGNORECASE,
 )
 LOCAL_RESOURCE_RE = re.compile(
-    r"(?P<group>SP1|SP2|HP1|IP1)[^0-9]*(?P<lead>\d{2})H",
+    r"(?P<group>SP1|SP2|HP1|HP2|IP1|IP2|IP3|IP4)[^0-9]*"
+    r"(?P<lead_start>\d{3})H(?P<lead_end>\d{3})H",
     re.IGNORECASE,
 )
 
@@ -185,7 +193,8 @@ LOCAL_RESOURCE_RE = re.compile(
 @dataclass(frozen=True)
 class Resource:
     group: str
-    lead: int
+    lead_start: int
+    lead_end: int
     run_text: str | None
     title: str
     url: str | None
@@ -433,7 +442,8 @@ def api_resources(session: requests.Session) -> list[Resource]:
         resources.append(
             Resource(
                 group=match.group("group").upper(),
-                lead=int(match.group("lead")),
+                lead_start=int(match.group("lead_start")),
+                lead_end=int(match.group("lead_end")),
                 run_text=match.group("run"),
                 title=title,
                 url=str(item.get("url") or ""),
@@ -454,7 +464,8 @@ def local_resources(directory: Path) -> list[Resource]:
         resources.append(
             Resource(
                 group=match.group("group").upper(),
-                lead=int(match.group("lead")),
+                lead_start=int(match.group("lead_start")),
+                lead_end=int(match.group("lead_end")),
                 run_text=(match.groupdict().get("run") if "run" in match.groupdict() else None),
                 title=path.name,
                 url=None,
@@ -467,30 +478,51 @@ def local_resources(directory: Path) -> list[Resource]:
     return resources
 
 
+def _covers_range(spans: list[tuple[int, int]], upto: int) -> bool:
+    """Vérifie qu'une liste de plages [debut, fin] couvre 0..upto sans trou."""
+
+    covered = -1
+    for lead_start, lead_end in sorted(spans):
+        if lead_start > covered + 1:
+            return covered >= upto
+        covered = max(covered, lead_end)
+        if covered >= upto:
+            return True
+    return covered >= upto
+
+
 def choose_resources(
     resources: Iterable[Resource], forecast_hours: int
-) -> tuple[dict[tuple[str, int], Resource], datetime | None]:
+) -> tuple[dict[tuple[str, int, int], Resource], datetime | None]:
     resources = list(resources)
-    grouped: dict[str, dict[tuple[str, int], Resource]] = defaultdict(dict)
+    grouped: dict[str, dict[tuple[str, int, int], Resource]] = defaultdict(dict)
     for resource in resources:
-        grouped[resource.run_text or "local"][resource.group, resource.lead] = resource
+        grouped[resource.run_text or "local"][
+            resource.group, resource.lead_start, resource.lead_end
+        ] = resource
 
-    required = {
-        (group, lead)
-        for group in ("SP1", "SP2")
-        for lead in range(forecast_hours + 1)
-    }
-    required.add(("HP1", 0))
-    candidates: list[tuple[datetime, str, dict[tuple[str, int], Resource]]] = []
+    # SP1/SP2 doivent, à eux deux par famille, couvrir 0..forecast_hours sans
+    # trou. L'altitude (message "h") est incluse directement dans les paquets
+    # SP2 à +00 h : aucun paquet HP1 séparé n'est nécessaire (vérifié
+    # 2026-09-04 : HP1 000H012H pèse ~740 Mo pour un champ déjà disponible en
+    # ~700 Ko dans SP2).
+    candidates: list[tuple[datetime, str, dict[tuple[str, int, int], Resource]]] = []
     for run_text, selection in grouped.items():
-        if not required.issubset(selection):
+        sp1_spans = [(ls, le) for (g, ls, le) in selection if g == "SP1"]
+        sp2_spans = [(ls, le) for (g, ls, le) in selection if g == "SP2"]
+        if not sp1_spans or not sp2_spans:
+            continue
+        if not (
+            _covers_range(sp1_spans, forecast_hours)
+            and _covers_range(sp2_spans, forecast_hours)
+        ):
             continue
         parsed = parse_run_text(None if run_text == "local" else run_text)
         candidates.append((parsed or datetime.min.replace(tzinfo=timezone.utc), run_text, selection))
     if not candidates:
         inventories: list[str] = []
         for run_text in sorted(grouped):
-            counts = Counter(group for group, _lead in grouped[run_text])
+            counts = Counter(group for group, _ls, _le in grouped[run_text])
             inventories.append(
                 f"{run_text}: "
                 + ", ".join(
@@ -500,11 +532,16 @@ def choose_resources(
             )
         raise IncompleteRunError(
             "Catalogue ARPEGE en cours de synchronisation : aucun run unique ne "
-            f"contient SP1/SP2 de +00 h à +{forecast_hours:02d} h et HP1 +00 h "
+            f"contient SP1/SP2 couvrant +00 h à +{forecast_hours:02d} h "
             f"(par run : {'; '.join(inventories) or 'aucune ressource'})"
         )
     _date, run_text, selection = max(candidates, key=lambda item: item[0])
-    return selection, parse_run_text(None if run_text == "local" else run_text)
+    chosen = {
+        key: resource
+        for key, resource in selection.items()
+        if key[0] in ("SP1", "SP2") and key[1] <= forecast_hours
+    }
+    return chosen, parse_run_text(None if run_text == "local" else run_text)
 
 
 def wait_for_complete_remote_run(
@@ -744,13 +781,17 @@ def parse_grib_files(
     paths: Iterable[Path],
     grid: NationalGrid,
     map_sampler: MapSampler,
-    lead_hour: int,
-) -> dict[str, Any]:
-    point_values: dict[str, np.ndarray] = {}
-    map_values: dict[str, np.ndarray] = {}
-    run_time: datetime | None = None
-    valid_time: datetime | None = None
-    observed_lead: int | None = None
+) -> dict[int, dict[str, Any]]:
+    """Décode un ensemble de paquets GRIB2 ARPEGE et regroupe les messages
+    par échéance réelle (``endStep``).
+
+    Contrairement à AROME, un paquet ARPEGE (ex. ``SP1__000H012H``) couvre
+    plusieurs échéances et paramètres dans un même fichier ; il faut donc
+    répartir chaque message GRIB dans le bon panier d'échéance plutôt que de
+    supposer un fichier = une échéance.
+    """
+
+    steps: dict[int, dict[str, Any]] = {}
 
     for path in paths:
         with path.open("rb") as handle:
@@ -762,35 +803,35 @@ def parse_grib_files(
                     field = message_field(gid)
                     if field is None:
                         continue
-                    run_time = run_time or grib_datetime(gid, "dataDate", "dataTime")
-                    valid_time = valid_time or grib_datetime(
+                    end_step = safe_get(gid, "endStep")
+                    if end_step is None:
+                        continue
+                    lead_hour = int(end_step)
+                    bucket = steps.setdefault(
+                        lead_hour,
+                        {
+                            "lead_hour": lead_hour,
+                            "run_time": None,
+                            "valid_time": None,
+                            "values": {},
+                            "map_values": {},
+                        },
+                    )
+                    bucket["run_time"] = bucket["run_time"] or grib_datetime(
+                        gid, "dataDate", "dataTime"
+                    )
+                    bucket["valid_time"] = bucket["valid_time"] or grib_datetime(
                         gid, "validityDate", "validityTime"
                     )
-                    end_step = safe_get(gid, "endStep")
-                    if end_step is not None:
-                        observed_lead = int(end_step)
-                    point_values[field] = grid.extract(gid)
-                    map_values[field] = map_sampler.extract(gid, grid)
+                    bucket["values"][field] = grid.extract(gid)
+                    bucket["map_values"][field] = map_sampler.extract(gid, grid)
                 finally:
                     codes_release(gid)
 
-    if "temperature_k" not in point_values:
-        raise RuntimeError(f"Température à 2 m absente de l'échéance +{lead_hour:02d} h")
-    if observed_lead is not None and observed_lead != lead_hour:
-        raise RuntimeError(
-            f"Échéance GRIB incohérente : +{observed_lead} h au lieu de +{lead_hour} h"
-        )
-    if valid_time is None and run_time is not None:
-        valid_time = run_time + timedelta(hours=lead_hour)
-    if valid_time is None:
-        raise RuntimeError(f"Date de validité absente à +{lead_hour:02d} h")
-    return {
-        "lead_hour": lead_hour,
-        "run_time": run_time,
-        "valid_time": valid_time,
-        "values": point_values,
-        "map_values": map_values,
-    }
+    for lead_hour, bucket in steps.items():
+        if bucket["valid_time"] is None and bucket["run_time"] is not None:
+            bucket["valid_time"] = bucket["run_time"] + timedelta(hours=lead_hour)
+    return steps
 
 
 def array_like(
@@ -1183,7 +1224,7 @@ def write_departments(
 
 
 def build_product(
-    resources: dict[tuple[str, int], Resource],
+    resources: dict[tuple[str, int, int], Resource],
     catalog: NationalCatalog,
     forecast_hours: int,
     session: requests.Session,
@@ -1225,76 +1266,98 @@ def build_product(
     model_run = run_hint
     source_bytes = 0
 
+    # Un même paquet (ex. SP1 000H012H) couvre plusieurs échéances : on le
+    # télécharge une seule fois, puis on répartit ses messages GRIB par
+    # échéance réelle plutôt que de retélécharger un fichier par heure.
+    unique_resources: dict[tuple[str, int, int], Resource] = dict(resources.items())
+    downloaded_paths: list[Path] = []
     try:
-        for lead in range(forecast_hours + 1):
-            current_paths: list[Path] = []
-            current_resources = [resources["SP1", lead], resources["SP2", lead]]
+        for (group, lead_start, lead_end), resource in sorted(
+            unique_resources.items(), key=lambda item: (item[0][0], item[0][1])
+        ):
+            destination = downloads / f"{group}-{lead_start:03d}H{lead_end:03d}H.grib2"
+            LOGGER.info(
+                "Téléchargement %s +%03d h à +%03d h (%.1f Mo)",
+                group,
+                lead_start,
+                lead_end,
+                (resource.size or 0) / 1e6,
+            )
+            download_resource(session, resource, destination)
+            source_bytes += destination.stat().st_size
+            downloaded_paths.append(destination)
+
+        LOGGER.info("Décodage GRIB2 ARPEGE (%s paquets)", len(downloaded_paths))
+        steps_by_lead = parse_grib_files(downloaded_paths, grid, map_sampler)
+
+        available_leads = sorted(
+            lead for lead in steps_by_lead if lead <= forecast_hours
+        )
+        if not available_leads:
+            raise RuntimeError(
+                "Aucune échéance décodée dans les paquets ARPEGE téléchargés"
+            )
+        if 0 not in available_leads:
+            raise RuntimeError("Échéance +00 h absente : altitude ARPEGE indisponible")
+
+        for index, lead in enumerate(available_leads):
+            step = steps_by_lead[lead]
+            if "temperature_k" not in step["values"]:
+                raise RuntimeError(f"Température à 2 m absente de l'échéance +{lead:02d} h")
+            if step["valid_time"] is None:
+                raise RuntimeError(f"Date de validité absente à +{lead:02d} h")
+            model_run = model_run or step["run_time"]
             if lead == 0:
-                current_resources.append(resources["HP1", 0])
-            try:
-                for resource in current_resources:
-                    destination = downloads / f"{resource.group}-{lead:02d}H.grib2"
-                    LOGGER.info(
-                        "Téléchargement +%02d h %s (%.1f Mo)",
-                        lead,
-                        resource.group,
-                        (resource.size or 0) / 1e6,
+                point_altitude = step["values"].get("altitude_m")
+                map_altitude = step["map_values"].get("altitude_m")
+                if point_altitude is None or map_altitude is None:
+                    raise RuntimeError(
+                        "Altitude ARPEGE (champ 'h') absente des paquets SP2 +00 h"
                     )
-                    download_resource(session, resource, destination)
-                    source_bytes += destination.stat().st_size
-                    current_paths.append(destination)
-                LOGGER.info(
-                    "Décodage et cartes ARPEGE %s/%s : +%02d h",
-                    lead + 1,
-                    forecast_hours + 1,
-                    lead,
+                for department in catalog.departments.values():
+                    for position, global_id in enumerate(department.global_point_ids):
+                        department.points[position].append(
+                            json_number(point_altitude[int(global_id)], integer=True)
+                        )
+            assert point_altitude is not None and map_altitude is not None
+            LOGGER.info(
+                "Cartes ARPEGE %s/%s : +%02d h",
+                index + 1,
+                len(available_leads),
+                lead,
+            )
+            transformed, point_state = transform_step(
+                step["values"], point_altitude, point_state, lead
+            )
+            map_transformed, map_state = transform_step(
+                step["map_values"], map_altitude, map_state, lead
+            )
+            map_fields = {
+                key: values
+                for key, values in map_transformed.items()
+                if key in MAP_FIELDS
+            }
+            map_renderer.render_step(
+                lead_hour=lead,
+                valid_time=step["valid_time"],
+                fields=map_fields,
+            )
+            iso_time = iso_utc(step["valid_time"])
+            for code, department in catalog.departments.items():
+                line = [
+                    iso_time,
+                    compact_rows(transformed, department.global_point_ids),
+                ]
+                json.dump(
+                    line,
+                    line_handles[code],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
                 )
-                step = parse_grib_files(current_paths, grid, map_sampler, lead)
-                model_run = model_run or step["run_time"]
-                if lead == 0:
-                    point_altitude = step["values"].get("altitude_m")
-                    map_altitude = step["map_values"].get("altitude_m")
-                    if point_altitude is None or map_altitude is None:
-                        raise RuntimeError("Altitude ARPEGE absente du fichier HP1 +00 h")
-                    for department in catalog.departments.values():
-                        for position, global_id in enumerate(department.global_point_ids):
-                            department.points[position].append(
-                                json_number(point_altitude[int(global_id)], integer=True)
-                            )
-                assert point_altitude is not None and map_altitude is not None
-                transformed, point_state = transform_step(
-                    step["values"], point_altitude, point_state, lead
-                )
-                map_transformed, map_state = transform_step(
-                    step["map_values"], map_altitude, map_state, lead
-                )
-                map_fields = {
-                    key: values
-                    for key, values in map_transformed.items()
-                    if key in MAP_FIELDS
-                }
-                map_renderer.render_step(
-                    lead_hour=lead,
-                    valid_time=step["valid_time"],
-                    fields=map_fields,
-                )
-                iso_time = iso_utc(step["valid_time"])
-                for code, department in catalog.departments.items():
-                    line = [
-                        iso_time,
-                        compact_rows(transformed, department.global_point_ids),
-                    ]
-                    json.dump(
-                        line,
-                        line_handles[code],
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    )
-                    line_handles[code].write("\n")
-            finally:
-                for path in current_paths:
-                    path.unlink(missing_ok=True)
+                line_handles[code].write("\n")
     finally:
+        for path in downloaded_paths:
+            path.unlink(missing_ok=True)
         for handle in line_handles.values():
             handle.close()
 
