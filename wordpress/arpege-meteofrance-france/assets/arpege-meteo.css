@@ -1,0 +1,1901 @@
+.arp-card {
+    --arp-navy: #073b63;
+    --arp-blue: #086ca8;
+    --arp-cyan: #1fb8d0;
+    --arp-line: #d9e5ed;
+    --arp-soft: #f3f8fb;
+    width: 100%;
+    max-width: 1180px;
+    box-sizing: border-box;
+    margin: 1.25rem auto;
+    overflow: hidden;
+    border: 1px solid #cbdce7;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(7, 59, 99, .14);
+    color: #183242;
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.arp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 22px 26px;
+    background: linear-gradient(120deg, var(--arp-navy), #075887 62%, #0b83ac);
+    color: #fff;
+}
+
+.arp-header h2 {
+    margin: 2px 0 5px;
+    color: #fff;
+    font-size: clamp(1.25rem, 2vw, 1.85rem);
+    line-height: 1.15;
+}
+
+.arp-kicker,
+.arp-meta {
+    margin: 0;
+}
+
+.arp-kicker {
+    color: #aeefff;
+    font-size: .69rem;
+    font-weight: 800;
+    letter-spacing: .09em;
+}
+
+.arp-meta {
+    color: #dceff7;
+    font-size: .82rem;
+}
+
+.arp-meta span {
+    padding: 0 6px;
+}
+
+.arp-badge {
+    min-width: 112px;
+    padding: 9px 12px;
+    border: 1px solid rgba(255, 255, 255, .45);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .12);
+    text-align: center;
+    font-size: .72rem;
+    letter-spacing: .08em;
+    line-height: 1.05;
+}
+
+.arp-badge strong {
+    font-size: 1.18rem;
+}
+
+.arp-card [hidden] {
+    display: none !important;
+}
+
+.arp-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 22px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #cfe0e9;
+    background: linear-gradient(180deg, #f7fbfd, #edf6fa);
+}
+
+.arp-search {
+    position: relative;
+    z-index: 5;
+    width: min(100%, 590px);
+}
+
+.arp-search > label {
+    display: block;
+    margin: 0 0 6px;
+    color: var(--arp-navy);
+    font-size: .82rem;
+    font-weight: 800;
+}
+
+.arp-search-control {
+    position: relative;
+}
+
+.arp-search-icon {
+    position: absolute;
+    top: 50%;
+    left: 13px;
+    z-index: 1;
+    color: #337894;
+    font-size: 1.35rem;
+    line-height: 1;
+    transform: translateY(-52%);
+    pointer-events: none;
+}
+
+.arp-card .arp-city-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 46px;
+    margin: 0;
+    padding: 9px 42px;
+    border: 2px solid #86b6ca;
+    border-radius: 10px;
+    outline: 0;
+    background: #fff;
+    box-shadow: 0 2px 7px rgba(7, 59, 99, .08);
+    color: #173c51;
+    font: 700 .96rem/1.2 Inter, "Segoe UI", Arial, sans-serif;
+    appearance: none;
+}
+
+.arp-card .arp-city-input:focus {
+    border-color: var(--arp-blue);
+    box-shadow: 0 0 0 3px rgba(8, 108, 168, .17);
+}
+
+.arp-card .arp-city-input::-webkit-search-cancel-button {
+    cursor: pointer;
+}
+
+.arp-search-results {
+    position: absolute;
+    top: 72px;
+    right: 0;
+    left: 0;
+    z-index: 20;
+    max-height: 330px;
+    overflow-y: auto;
+    border: 1px solid #9fc4d5;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 14px 32px rgba(7, 59, 99, .24);
+}
+
+.arp-card .arp-search-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 52px;
+    margin: 0;
+    padding: 9px 13px;
+    border: 0;
+    border-bottom: 1px solid #dce9ef;
+    border-radius: 0;
+    background: #fff;
+    color: #183b4e;
+    text-align: left;
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    cursor: pointer;
+}
+
+.arp-card .arp-search-result:last-child {
+    border-bottom: 0;
+}
+
+.arp-card .arp-search-result:hover,
+.arp-card .arp-search-result:focus,
+.arp-card .arp-search-result.is-active {
+    outline: 0;
+    background: #e6f5fb;
+    color: #073b63;
+}
+
+.arp-result-name {
+    font-size: .9rem;
+    font-weight: 800;
+}
+
+.arp-result-details {
+    color: #587583;
+    font-size: .74rem;
+    white-space: nowrap;
+}
+
+.arp-search-status {
+    min-height: 18px;
+    margin: 5px 2px 0;
+    color: #55717f;
+    font-size: .72rem;
+}
+
+.arp-search-status.arp-search-error {
+    color: #9a2727;
+    font-weight: 700;
+}
+
+.arp-coverage {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    padding-top: 22px;
+    color: #496978;
+    font-size: .72rem;
+}
+
+.arp-coverage strong {
+    color: var(--arp-navy);
+    font-size: .95rem;
+}
+
+.arp-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-color: #9bb9ca #edf4f7;
+}
+
+.arp-stale {
+    margin: 0;
+    padding: 10px 18px;
+    border-bottom: 1px solid #e7c56c;
+    background: #fff6d8;
+    color: #704f00;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.arp-table {
+    width: 100%;
+    min-width: 820px;
+    margin: 0;
+    border: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: .84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.arp-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 10px 7px;
+    border: 0;
+    border-bottom: 2px solid #b8d2e1;
+    background: #e8f3f8;
+    color: #17435c;
+    text-align: center;
+    text-transform: uppercase;
+    font-size: .69rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    white-space: nowrap;
+}
+
+.arp-table tbody th,
+.arp-table tbody td {
+    padding: 8px 7px;
+    border: 0;
+    border-bottom: 1px solid var(--arp-line);
+    background: #fff;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.arp-table .arp-loading {
+    height: 110px;
+    background: #fff !important;
+    color: #426677;
+    text-align: center;
+    font-weight: 700;
+}
+
+.arp-table .arp-load-error {
+    color: #942424;
+}
+
+.arp-table tbody tr:nth-child(even) th,
+.arp-table tbody tr:nth-child(even) td {
+    background: var(--arp-soft);
+}
+
+.arp-table tbody tr:hover th,
+.arp-table tbody tr:hover td {
+    background: #eaf7fb;
+}
+
+.arp-table tbody tr.arp-new-day th,
+.arp-table tbody tr.arp-new-day td {
+    border-top: 3px solid var(--arp-cyan);
+}
+
+.arp-table tbody th {
+    color: var(--arp-navy);
+    font-weight: 800;
+}
+
+.arp-hour {
+    color: #075887;
+    font-weight: 800;
+}
+
+.arp-condition {
+    min-width: 112px;
+    text-align: left !important;
+}
+
+.arp-icon {
+    display: inline-block;
+    width: 28px;
+    margin-right: 4px;
+    text-align: center;
+    font-size: 1.15rem;
+}
+
+.arp-temperature {
+    font-weight: 900;
+}
+
+.arp-temp-cold { color: #225db4; background: #e5f0ff !important; }
+.arp-temp-cool { color: #087da1; }
+.arp-temp-mild { color: #278238; }
+.arp-temp-warm { color: #c27500; background: #fff6d8 !important; }
+.arp-temp-hot { color: #d64a16; background: #ffe8dc !important; }
+.arp-temp-extreme { color: #fff; background: #bb142c !important; }
+
+.arp-rain {
+    color: #075da3;
+    background: #dff2ff !important;
+    font-weight: 800;
+}
+
+.arp-direction {
+    display: inline-block;
+    min-width: 31px;
+    margin-left: 3px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: #dfeaf0;
+    color: #274c60;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.arp-gust-moderate { color: #986400; background: #fff4c9 !important; }
+.arp-gust-strong { color: #b5440a; background: #ffe5d4 !important; }
+.arp-gust-danger { color: #fff; background: #b7192f !important; }
+
+.arp-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px 20px;
+    padding: 12px 18px;
+    background: #edf5f8;
+    color: #4d6878;
+    font-size: .72rem;
+}
+
+.arp-footer a {
+    color: #075f94;
+    font-weight: 700;
+}
+
+.arp-message {
+    margin: 1rem 0;
+    padding: 13px 16px;
+    border-radius: 8px;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.arp-error {
+    border: 1px solid #e5b5b5;
+    background: #fff0f0;
+    color: #8a2020;
+}
+
+@media (max-width: 680px) {
+    .arp-card {
+        border-radius: 10px;
+    }
+
+    .arp-header {
+        align-items: flex-start;
+        padding: 17px;
+    }
+
+    .arp-toolbar {
+        display: block;
+        padding: 15px;
+    }
+
+    .arp-search {
+        width: 100%;
+    }
+
+    .arp-card .arp-search-result {
+        display: block;
+    }
+
+    .arp-result-name,
+    .arp-result-details {
+        display: block;
+    }
+
+    .arp-result-details {
+        margin-top: 3px;
+        white-space: normal;
+    }
+
+    .arp-coverage {
+        display: none;
+    }
+
+    .arp-badge {
+        min-width: 86px;
+    }
+
+    .arp-footer {
+        display: block;
+    }
+
+    .arp-footer span {
+        display: block;
+        margin: 4px 0;
+    }
+}
+
+@media print {
+    .arp-card {
+        box-shadow: none;
+    }
+
+    .arp-table-wrap {
+        overflow: visible;
+    }
+
+    .arp-table {
+        min-width: 0;
+        font-size: 7pt;
+    }
+}
+
+/* === Sélecteur Général / Orages / Neige — v2.3 === */
+.arp-tabs {
+    display: flex;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #cfe0e9;
+    background: #fff;
+}
+
+.arp-card .arp-tab {
+    appearance: none;
+    margin: 0;
+    padding: 10px 16px;
+    border: 1px solid #a9c5d4;
+    border-radius: 999px;
+    background: #f4f8fb;
+    color: #214b61;
+    font: 800 .84rem/1.2 Inter, "Segoe UI", Arial, sans-serif;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.arp-card .arp-tab:hover,
+.arp-card .arp-tab:focus-visible {
+    outline: 0;
+    transform: translateY(-1px);
+    box-shadow: 0 5px 14px rgba(7, 59, 99, .12);
+}
+
+.arp-card .arp-tab.is-active {
+    border-color: #0b6f9f;
+    background: #0b6f9f;
+    color: #fff;
+    box-shadow: 0 6px 15px rgba(11, 111, 159, .22);
+}
+
+.arp-card .arp-tab-storm.is-active {
+    border-color: #7b3fa1;
+    background: linear-gradient(135deg, #563072, #8d4ca8);
+    box-shadow: 0 6px 15px rgba(102, 55, 132, .24);
+}
+
+.arp-card .arp-tab-snow.is-active {
+    border-color: #2787ad;
+    background: linear-gradient(135deg, #176a91, #50a9c9);
+    box-shadow: 0 6px 15px rgba(23, 106, 145, .24);
+}
+
+.arp-panel[hidden] {
+    display: none !important;
+}
+
+.arp-storm-summary {
+    margin: 0;
+    padding: 11px 18px;
+    border-bottom: 1px solid #d8c7e5;
+    background: #f5eff9;
+    color: #55306a;
+    font-size: .82rem;
+    font-weight: 800;
+}
+
+.arp-storm-summary-warning {
+    border-bottom-color: #e6c467;
+    background: #fff6d8;
+    color: #704f00;
+}
+
+.arp-storm-wrap {
+    background: #fff;
+}
+
+.arp-storm-table {
+    min-width: 1680px;
+    font-size: .77rem;
+}
+
+.arp-storm-table thead th {
+    background: #f0e8f6;
+    color: #4f2b63;
+    border-bottom-color: #cbb6d8;
+}
+
+.arp-storm-table tbody tr:nth-child(even) th,
+.arp-storm-table tbody tr:nth-child(even) td {
+    background: #fbf8fd;
+}
+
+.arp-thunder-risk,
+.arp-hazard {
+    font-weight: 900;
+}
+
+.arp-thunder-0 { background: #f2f4f5 !important; color: #53616a; }
+.arp-thunder-1 { background: #e8f7ea !important; color: #207438; }
+.arp-thunder-2 { background: #fff5c9 !important; color: #806400; }
+.arp-thunder-3 { background: #ffe3c7 !important; color: #a44600; }
+.arp-thunder-4 { background: #b81f37 !important; color: #fff; }
+
+.arp-hazard-0 { color: #3f6c4b; }
+.arp-hazard-1 { background: #eef7e9 !important; color: #397144; }
+.arp-hazard-2 { background: #fff0c4 !important; color: #8b6100; }
+.arp-hazard-3 { background: #ffd9d9 !important; color: #9b2323; }
+
+.arp-cape-mid {
+    background: #fff2c8 !important;
+    color: #805a00;
+    font-weight: 800;
+}
+
+.arp-cape-high {
+    background: #ffd5bd !important;
+    color: #a33e00;
+    font-weight: 900;
+}
+
+.arp-lightning-high {
+    background: #eee3ff !important;
+    color: #5f2e99;
+    font-weight: 900;
+}
+
+.arp-rain-heavy {
+    background: #d9ebff !important;
+    color: #075aa5;
+    font-weight: 900;
+}
+
+.arp-storm-type {
+    min-width: 150px;
+    color: #4d2a61;
+    font-weight: 800;
+}
+
+
+.arp-details-cell {
+    min-width: 74px;
+}
+
+.arp-card .arp-details-button {
+    margin: 0;
+    padding: 5px 8px;
+    border: 1px solid #af92c2;
+    border-radius: 7px;
+    background: #f5eff9;
+    color: #5d3471;
+    font: 800 .7rem/1.1 Inter, "Segoe UI", Arial, sans-serif;
+    cursor: pointer;
+}
+
+.arp-card .arp-details-button:hover,
+.arp-card .arp-details-button:focus-visible {
+    outline: 0;
+    background: #e9dcf1;
+}
+
+.arp-advanced-row td {
+    padding: 0 !important;
+    background: #f8f4fb !important;
+}
+
+.arp-advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(135px, 1fr));
+    gap: 8px;
+    padding: 10px 14px 12px;
+    text-align: left;
+}
+
+.arp-advanced-item {
+    padding: 8px 10px;
+    border: 1px solid #ddd0e6;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.arp-advanced-label,
+.arp-advanced-value {
+    display: block;
+}
+
+.arp-advanced-label {
+    margin-bottom: 3px;
+    color: #6c5875;
+    font-size: .66rem;
+    font-weight: 700;
+}
+
+.arp-advanced-value {
+    color: #47275a;
+    font-size: .82rem;
+    font-weight: 900;
+}
+
+.arp-storm-note {
+    margin: 0;
+    padding: 13px 18px 15px;
+    border-top: 1px solid #e1d7e8;
+    background: #faf8fc;
+    color: #665b6c;
+    font-size: .72rem;
+    line-height: 1.45;
+}
+
+
+/* === Risque de neige — v2.3 === */
+.arp-snow-summary {
+    margin: 0;
+    padding: 11px 18px;
+    border-bottom: 1px solid #b9d8e5;
+    background: #edf8fc;
+    color: #175a76;
+    font-size: .82rem;
+    font-weight: 800;
+}
+
+.arp-snow-summary-warning {
+    border-bottom-color: #e6c467;
+    background: #fff6d8;
+    color: #704f00;
+}
+
+.arp-snow-table {
+    min-width: 1220px;
+    font-size: .8rem;
+}
+
+.arp-snow-table thead th {
+    background: #e8f5fa;
+    color: #175a76;
+    border-bottom-color: #add2e0;
+}
+
+.arp-snow-table tbody tr:nth-child(even) th,
+.arp-snow-table tbody tr:nth-child(even) td {
+    background: #f7fbfd;
+}
+
+.arp-snow-risk,
+.arp-stick {
+    font-weight: 900;
+}
+
+.arp-snow-0 { background: #f2f4f5 !important; color: #53616a; }
+.arp-snow-1 { background: #e8f7ea !important; color: #207438; }
+.arp-snow-2 { background: #fff5c9 !important; color: #806400; }
+.arp-snow-3 { background: #dceeff !important; color: #145d91; }
+.arp-snow-4 { background: #255f9a !important; color: #fff; }
+
+.arp-stick-0 { color: #66747c; }
+.arp-stick-1 { color: #36714a; }
+.arp-stick-2 { background: #e8f3ff !important; color: #205f95; }
+.arp-stick-3 { background: #cfe5ff !important; color: #114f86; }
+
+.arp-snow-note {
+    margin: 0;
+    padding: 13px 18px 15px;
+    border-top: 1px solid #d2e6ee;
+    background: #f8fcfd;
+    color: #526b76;
+    font-size: .72rem;
+    line-height: 1.45;
+}
+
+/* === Ajustements v2.4 : dates groupées, vent/pluie colorés, diagrammes === */
+.arp-day-cell {
+    min-width: 66px;
+    padding: 7px 6px !important;
+    vertical-align: middle;
+    border-right: 1px solid #9ed7d7 !important;
+    background: #dff8f6 !important;
+    color: #075887 !important;
+    text-align: center !important;
+    white-space: normal !important;
+}
+
+.arp-day-weekday,
+.arp-day-date {
+    display: block;
+    line-height: 1.15;
+}
+
+.arp-day-weekday {
+    margin-bottom: 4px;
+    font-size: .76rem;
+    font-weight: 900;
+    text-transform: capitalize;
+}
+
+.arp-day-date {
+    font-size: .72rem;
+    font-weight: 800;
+}
+
+.arp-hour {
+    min-width: 54px;
+}
+
+.arp-wind-cell strong {
+    display: inline-block;
+    min-width: 58px;
+}
+
+.arp-direction {
+    display: inline-flex;
+    min-width: 48px;
+    margin-left: 5px;
+    padding: 3px 5px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border-radius: 6px;
+    background: #edf3f6;
+    color: #274c60;
+    font-size: .69rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.arp-wind-arrow {
+    display: inline-block;
+    width: 15px;
+    transform-origin: 50% 50%;
+    font-size: .95rem;
+    line-height: 1;
+}
+
+.arp-wind-light { color: #26725b; }
+.arp-direction.arp-wind-light { background: #e7f6ef; }
+.arp-wind-moderate { color: #32729b; }
+.arp-direction.arp-wind-moderate { background: #e5f1f8; }
+.arp-wind-fresh { color: #8b6500; }
+.arp-direction.arp-wind-fresh { background: #fff4c9; }
+.arp-wind-strong { color: #b34a0a; }
+.arp-direction.arp-wind-strong { background: #ffe4cf; }
+.arp-wind-violent { color: #a4142d; }
+.arp-direction.arp-wind-violent { background: #ffd9df; }
+
+.arp-rain-trace {
+    background: #eef9ff !important;
+    color: #35779a !important;
+}
+.arp-rain-light {
+    background: #dff3ff !important;
+    color: #126493 !important;
+}
+.arp-rain-moderate {
+    background: #bfe7ff !important;
+    color: #075b91 !important;
+}
+.arp-rain-strong {
+    background: #81c9f3 !important;
+    color: #063f70 !important;
+}
+.arp-rain-intense {
+    background: #225ea8 !important;
+    color: #fff !important;
+}
+
+.arp-top-scroll {
+    height: 18px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid #d8c7e5;
+    background: #fbf8fd;
+    scrollbar-color: #9d7caf #eee6f3;
+}
+
+.arp-top-scroll[hidden] {
+    display: none !important;
+}
+
+.arp-top-scroll > div {
+    height: 1px;
+}
+
+.arp-advanced-list {
+    display: flex;
+    width: min(100%, 520px);
+    margin: 0;
+    padding: 10px 14px 12px;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+}
+
+.arp-advanced-list .arp-advanced-item {
+    display: flex;
+    padding: 7px 10px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 1px solid #ddd0e6;
+    border-radius: 7px;
+    background: #fff;
+}
+
+.arp-advanced-list .arp-advanced-label,
+.arp-advanced-list .arp-advanced-value {
+    display: block;
+    margin: 0;
+}
+
+.arp-advanced-list .arp-advanced-label {
+    color: #6c5875;
+    font-size: .72rem;
+    font-weight: 800;
+}
+
+.arp-advanced-list .arp-advanced-value {
+    color: #47275a;
+    font-size: .82rem;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.arp-charts {
+    display: grid;
+    gap: 16px;
+    padding: 20px 18px 22px;
+    border-top: 1px solid #dbe7ee;
+    background: #f7fafc;
+}
+
+.arp-chart-card {
+    overflow: hidden;
+    border: 1px solid #d4e2ea;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 5px 16px rgba(7, 59, 99, .07);
+}
+
+.arp-chart-card h3 {
+    margin: 0;
+    padding: 13px 15px 8px;
+    color: #123f5a;
+    font-size: .94rem;
+    font-weight: 900;
+}
+
+.arp-chart-total {
+    margin: -3px 15px 2px;
+    color: #0a679a;
+    font-size: .78rem;
+    font-weight: 900;
+}
+
+.arp-chart {
+    min-height: 180px;
+    padding: 0 8px 8px;
+}
+
+.arp-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 180px;
+}
+
+.arp-chart-grid {
+    stroke: #dce7ed;
+    stroke-width: 1;
+}
+
+.arp-chart-axis {
+    fill: #607987;
+    font: 700 11px/1 Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.arp-chart-xaxis {
+    font-size: 10px;
+}
+
+.arp-chart-axis-cumulative {
+    fill: #315a8d;
+}
+
+.arp-chart-line {
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.arp-series-temperature { stroke: #d45b29; }
+.arp-series-pressure { stroke: #5d4ba7; }
+.arp-series-wind { stroke: #1c7f8c; }
+.arp-series-gust { stroke: #d07a23; }
+.arp-series-rain-cumulative { stroke: #315a8d; stroke-width: 2.4; }
+.arp-chart-rain-bar { fill: #45a9dd; }
+
+.arp-chart-empty {
+    display: flex;
+    min-height: 170px;
+    align-items: center;
+    justify-content: center;
+    color: #687f8a;
+    font-size: .8rem;
+    font-weight: 700;
+}
+
+@media (max-width: 680px) {
+    .arp-tabs {
+        gap: 7px;
+        padding: 11px 12px;
+        overflow-x: auto;
+    }
+
+    .arp-card .arp-tab {
+        flex: 0 0 auto;
+        padding: 9px 12px;
+        font-size: .78rem;
+    }
+
+    .arp-storm-summary,
+    .arp-snow-summary,
+    .arp-storm-note,
+    .arp-snow-note {
+        padding-right: 13px;
+        padding-left: 13px;
+    }
+
+    .arp-advanced-list {
+        width: auto;
+        padding: 9px;
+    }
+
+    .arp-advanced-list .arp-advanced-item {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .arp-charts {
+        padding: 14px 10px 16px;
+    }
+
+    .arp-chart-card h3 {
+        padding-right: 12px;
+        padding-left: 12px;
+        font-size: .86rem;
+    }
+
+    .arp-chart {
+        overflow-x: auto;
+        padding-right: 3px;
+        padding-left: 3px;
+    }
+
+    .arp-chart-svg {
+        width: 760px;
+        max-width: none;
+    }
+}
+
+
+/* === Ajustements v2.5 : jours colorés, vents par pas de 5, orages compacts === */
+.arp-day-cell {
+    border-right-width: 2px !important;
+}
+.arp-day-mon { background: #e5f1ff !important; border-right-color: #6da8e8 !important; color: #175a91 !important; }
+.arp-day-tue { background: #e8f7ea !important; border-right-color: #72b67d !important; color: #246b36 !important; }
+.arp-day-wed { background: #fff0df !important; border-right-color: #e6a45f !important; color: #8a4a08 !important; }
+.arp-day-thu { background: #efe7fb !important; border-right-color: #9f7bd1 !important; color: #5e3a8b !important; }
+.arp-day-fri { background: #e1f7f5 !important; border-right-color: #5ab7ad !important; color: #17675f !important; }
+.arp-day-sat { background: #fbe8f2 !important; border-right-color: #d986ad !important; color: #8c3c63 !important; }
+.arp-day-sun { background: #fff5ce !important; border-right-color: #d8ad3c !important; color: #7b5a00 !important; }
+
+.arp-storm-table {
+    min-width: 1410px;
+}
+
+/* Date et heure restent visibles pendant le défilement horizontal. */
+.arp-storm-table thead th:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 8;
+    min-width: 70px;
+}
+.arp-storm-table thead th:nth-child(2) {
+    position: sticky;
+    left: 70px;
+    z-index: 8;
+    min-width: 58px;
+    box-shadow: 4px 0 8px rgba(50, 31, 60, .08);
+}
+.arp-storm-table tbody .arp-day-cell {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+    min-width: 70px;
+}
+.arp-storm-table tbody .arp-hour {
+    position: sticky;
+    left: 70px;
+    z-index: 5;
+    min-width: 58px;
+    background: #f8f4fb !important;
+    box-shadow: 4px 0 8px rgba(50, 31, 60, .06);
+}
+.arp-storm-table tbody tr:hover .arp-hour {
+    background: #eee4f5 !important;
+}
+
+.arp-details-cell {
+    min-width: 178px;
+    padding: 6px 7px !important;
+    vertical-align: top;
+}
+.arp-card .arp-details-button {
+    width: 100%;
+    min-height: 29px;
+}
+.arp-details-inline {
+    width: 100%;
+    margin-top: 7px;
+    padding: 0;
+    gap: 5px;
+}
+.arp-details-inline[hidden] {
+    display: none !important;
+}
+.arp-details-inline .arp-advanced-item {
+    display: block;
+    padding: 6px 7px;
+    border-radius: 6px;
+    text-align: left;
+}
+.arp-details-inline .arp-advanced-label {
+    margin: 0 0 2px;
+    font-size: .64rem;
+    line-height: 1.15;
+    white-space: normal;
+}
+.arp-details-inline .arp-advanced-value {
+    font-size: .76rem;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.arp-top-scroll {
+    height: 20px;
+    border-top: 1px solid #e2d6ea;
+}
+
+/* Teinte légère de la colonne Heure, assortie au jour. */
+.arp-hour-mon { background: #f3f8ff !important; }
+.arp-hour-tue { background: #f2faf3 !important; }
+.arp-hour-wed { background: #fff8f0 !important; }
+.arp-hour-thu { background: #f8f4fd !important; }
+.arp-hour-fri { background: #f1fbfa !important; }
+.arp-hour-sat { background: #fff5fa !important; }
+.arp-hour-sun { background: #fffaf0 !important; }
+.arp-storm-table tbody .arp-hour-mon { background: #f3f8ff !important; }
+.arp-storm-table tbody .arp-hour-tue { background: #f2faf3 !important; }
+.arp-storm-table tbody .arp-hour-wed { background: #fff8f0 !important; }
+.arp-storm-table tbody .arp-hour-thu { background: #f8f4fd !important; }
+.arp-storm-table tbody .arp-hour-fri { background: #f1fbfa !important; }
+.arp-storm-table tbody .arp-hour-sat { background: #fff5fa !important; }
+.arp-storm-table tbody .arp-hour-sun { background: #fffaf0 !important; }
+
+/* === Altitude visible et profil neige expert === */
+.arp-city-altitude {
+    display: inline-flex;
+    margin: 7px 0 4px;
+    padding: 5px 9px;
+    align-items: center;
+    border: 1px solid #c8dbe3;
+    border-radius: 999px;
+    background: #f2f8fa;
+    color: #245b70;
+    font-size: .76rem;
+    font-weight: 850;
+    line-height: 1.2;
+}
+.arp-city-altitude.arp-altitude-missing {
+    border-color: #e2ca84;
+    background: #fff7dd;
+    color: #795b05;
+}
+
+.arp-snow-table {
+    min-width: 1260px;
+}
+
+.arp-snow-wind {
+    min-width: 142px;
+    white-space: nowrap;
+}
+.arp-snow-wind strong {
+    display: block;
+    margin-bottom: 5px;
+}
+.arp-thickness {
+    min-width: 88px;
+    font-weight: 900;
+    color: #315f78;
+}
+
+.arp-snow-details-cell {
+    min-width: 205px;
+}
+.arp-snow-profile {
+    display: flex;
+    width: 100%;
+    margin-top: 7px;
+    padding: 0;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+.arp-snow-profile[hidden] {
+    display: none !important;
+}
+.arp-profile-section {
+    display: block;
+    margin: 0;
+    padding: 7px;
+    border: 1px solid #c8dfe8;
+    border-radius: 7px;
+    background: #f8fcfe;
+}
+.arp-profile-title {
+    display: block;
+    margin: 0 0 6px;
+    color: #175a76;
+    font-size: .7rem;
+    font-weight: 900;
+}
+.arp-profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.arp-profile-item {
+    display: flex;
+    padding: 4px 5px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 5px;
+    background: #fff;
+}
+.arp-profile-label {
+    color: #59717c;
+    font-size: .66rem;
+    font-weight: 800;
+}
+.arp-profile-value {
+    color: #123f53;
+    font-size: .74rem;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+/* La date et l'heure restent lisibles dans le tableau neige aussi. */
+.arp-snow-table thead th:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 8;
+    min-width: 70px;
+}
+.arp-snow-table thead th:nth-child(2) {
+    position: sticky;
+    left: 70px;
+    z-index: 8;
+    min-width: 58px;
+    box-shadow: 4px 0 8px rgba(20, 78, 104, .08);
+}
+.arp-snow-table tbody .arp-day-cell {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+    min-width: 70px;
+}
+.arp-snow-table tbody .arp-hour {
+    position: sticky;
+    left: 70px;
+    z-index: 5;
+    min-width: 58px;
+    box-shadow: 4px 0 8px rgba(20, 78, 104, .06);
+}
+
+
+/* === Diagrammes ARPEGE modernisés === */
+.arp-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    padding: 24px 20px 28px;
+    background:
+        radial-gradient(circle at top left, rgba(45, 137, 184, .07), transparent 38%),
+        #f5f9fb;
+}
+
+.arp-chart-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #d7e5ec;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdfe 100%);
+    box-shadow: 0 10px 28px rgba(20, 67, 94, .09);
+}
+
+.arp-chart-card::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2487b2, #60b8d5 45%, #9bcddd);
+    content: "";
+}
+
+.arp-chart-card h3 {
+    margin: 0;
+    padding: 18px 18px 7px;
+    color: #123e57;
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1.3;
+}
+
+.arp-chart-total {
+    margin: 0 18px 4px;
+    color: #126d9c;
+    font-size: .78rem;
+    font-weight: 900;
+}
+
+.arp-chart {
+    min-height: 260px;
+    padding: 4px 12px 14px;
+}
+
+.arp-chart-metrics {
+    display: flex;
+    gap: 7px;
+    margin: 2px 4px 8px;
+    flex-wrap: wrap;
+}
+
+.arp-chart-metric {
+    display: inline-flex;
+    min-height: 28px;
+    padding: 5px 9px;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #dce8ee;
+    border-radius: 999px;
+    background: #f6fafc;
+    color: #466573;
+    font-size: .69rem;
+    font-weight: 800;
+}
+
+.arp-chart-metric-label {
+    color: #6d8792;
+    font-weight: 750;
+}
+
+.arp-chart-metric-value {
+    color: #173f55;
+    font-weight: 950;
+}
+
+.arp-chart-viewport {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #a9c7d5 transparent;
+}
+
+.arp-chart-svg {
+    display: block;
+    width: 100%;
+    min-width: 660px;
+    height: auto;
+    min-height: 235px;
+    overflow: visible;
+}
+
+.arp-chart-grid {
+    stroke: rgba(96, 128, 143, .22);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.arp-chart-grid-vertical {
+    stroke-dasharray: 3 6;
+    opacity: .55;
+}
+
+.arp-chart-axis {
+    fill: #617985;
+    font: 750 11px/1 Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.arp-chart-xaxis {
+    fill: #486575;
+    font-size: 10px;
+    font-weight: 850;
+}
+
+.arp-chart-legend-text {
+    fill: #3d5968;
+    font-weight: 850;
+}
+
+.arp-chart-line {
+    stroke-width: 3.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 1px 1px rgba(21, 56, 73, .12));
+}
+
+.arp-chart-point {
+    stroke: #fff;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    cursor: help;
+}
+
+.arp-chart-value-label {
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-width: 4px;
+    stroke-linejoin: round;
+    font: 900 11px/1 Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.arp-chart-area {
+    stroke: none !important;
+    opacity: .14;
+}
+
+.arp-series-temperature { stroke: #df6c2f; }
+.arp-chart-area.arp-series-temperature { fill: #f2a06e; opacity: .18; }
+.arp-chart-value-label.arp-series-temperature { fill: #b44b17; }
+
+.arp-series-pressure { stroke: #6758b3; }
+.arp-chart-area.arp-series-pressure { fill: #9185cf; opacity: .14; }
+.arp-chart-value-label.arp-series-pressure { fill: #514593; }
+
+.arp-series-wind { stroke: #197e91; }
+.arp-series-gust { stroke: #db7b25; }
+.arp-chart-wind-envelope {
+    fill: #e8b16f;
+    opacity: .16;
+    stroke: none;
+}
+
+.arp-series-rain-cumulative { stroke: #316b9d; }
+.arp-chart-rain-bar { fill: #5cb8de; }
+.arp-chart-rain-trace { fill: #9bd6ed; }
+.arp-chart-rain-light { fill: #62bfe4; }
+.arp-chart-rain-moderate { fill: #318fc8; }
+.arp-chart-rain-strong { fill: #2667b2; }
+.arp-chart-rain-intense { fill: #6551a8; }
+
+.arp-chart-day-band {
+    pointer-events: none;
+    opacity: .42;
+}
+.arp-dayband-mon { fill: #eaf4ff; }
+.arp-dayband-tue { fill: #edf8ef; }
+.arp-dayband-wed { fill: #fff4e8; }
+.arp-dayband-thu { fill: #f4edfc; }
+.arp-dayband-fri { fill: #eaf9f7; }
+.arp-dayband-sat { fill: #fceef5; }
+.arp-dayband-sun { fill: #fff8dc; }
+.arp-dayband-other { fill: #f5f7f8; }
+
+.arp-chart-day-label {
+    font: 900 10px/1 Inter, "Segoe UI", Arial, sans-serif;
+    letter-spacing: .02em;
+    text-transform: capitalize;
+}
+.arp-daylabel-mon { fill: #3978b2; }
+.arp-daylabel-tue { fill: #397b47; }
+.arp-daylabel-wed { fill: #9a5d18; }
+.arp-daylabel-thu { fill: #6f4c9b; }
+.arp-daylabel-fri { fill: #28756e; }
+.arp-daylabel-sat { fill: #9c4a72; }
+.arp-daylabel-sun { fill: #846614; }
+.arp-daylabel-other { fill: #647b87; }
+
+.arp-chart-empty {
+    min-height: 230px;
+    border: 1px dashed #d5e1e7;
+    border-radius: 12px;
+    background: #fafcfd;
+}
+
+@media (max-width: 1040px) {
+    .arp-charts {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 680px) {
+    .arp-charts {
+        gap: 14px;
+        padding: 14px 9px 18px;
+    }
+
+    .arp-chart-card {
+        border-radius: 14px;
+    }
+
+    .arp-chart-card h3 {
+        padding: 15px 13px 7px;
+        font-size: .9rem;
+    }
+
+    .arp-chart-total {
+        margin-right: 13px;
+        margin-left: 13px;
+    }
+
+    .arp-chart {
+        min-height: 245px;
+        padding: 3px 6px 10px;
+        overflow: visible;
+    }
+
+    .arp-chart-metrics {
+        margin-right: 6px;
+        margin-left: 6px;
+    }
+
+    .arp-chart-metric {
+        padding: 4px 8px;
+        font-size: .65rem;
+    }
+
+    .arp-chart-viewport {
+        border-radius: 10px;
+    }
+
+    .arp-chart-svg {
+        width: 760px;
+        min-width: 760px;
+        max-width: none;
+    }
+}
+
+/* === v2.8 : grands diagrammes + vraies infobulles + géolocalisation === */
+.arp-charts {
+    grid-template-columns: 1fr !important;
+    gap: 24px;
+    padding: 26px 20px 30px;
+}
+
+.arp-chart-card {
+    width: 100%;
+}
+
+.arp-chart-card h3 {
+    padding: 20px 20px 8px;
+    font-size: 1.08rem;
+}
+
+.arp-chart-total {
+    margin-right: 20px;
+    margin-left: 20px;
+    font-size: .86rem;
+}
+
+.arp-chart {
+    min-height: 420px;
+    padding: 6px 16px 18px;
+}
+
+.arp-chart-metrics {
+    gap: 9px;
+    margin: 4px 8px 12px;
+}
+
+.arp-chart-metric {
+    min-height: 32px;
+    padding: 6px 11px;
+    font-size: .76rem;
+}
+
+.arp-chart-viewport {
+    position: relative;
+    min-height: 390px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.arp-chart-svg {
+    display: block;
+    width: 100%;
+    min-width: 900px;
+    min-height: 390px;
+    max-width: none;
+}
+
+.arp-chart-axis {
+    font-size: 13px;
+}
+
+.arp-chart-xaxis {
+    font-size: 12px;
+}
+
+.arp-chart-day-label {
+    font-size: 12px;
+}
+
+.arp-chart-legend-text {
+    font-size: 12px;
+}
+
+.arp-chart-line {
+    stroke-width: 3.6;
+}
+
+.arp-chart-point {
+    transition: r .12s ease, filter .12s ease;
+    cursor: crosshair;
+}
+
+.arp-chart-point:hover,
+.arp-chart-point:focus {
+    r: 7.2px;
+    outline: none;
+    filter: drop-shadow(0 0 4px rgba(20, 62, 83, .32));
+}
+
+.arp-chart-rain-bar {
+    cursor: crosshair;
+}
+
+.arp-chart-rain-bar:hover,
+.arp-chart-rain-bar:focus {
+    outline: none;
+    filter: brightness(.92) drop-shadow(0 2px 3px rgba(20, 62, 83, .22));
+}
+
+.arp-chart-tooltip {
+    position: absolute;
+    z-index: 40;
+    max-width: 260px;
+    padding: 8px 11px;
+    border: 1px solid rgba(12, 70, 101, .16);
+    border-radius: 9px;
+    background: rgba(14, 49, 69, .96);
+    box-shadow: 0 8px 24px rgba(5, 37, 55, .22);
+    color: #fff;
+    font: 800 12px/1.35 Inter, "Segoe UI", Arial, sans-serif;
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translateY(-100%);
+}
+
+.arp-card .arp-locate-button {
+    display: inline-flex;
+    min-height: 36px;
+    margin: 8px 0 0;
+    padding: 7px 12px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #8dbdd1;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(7, 59, 99, .06);
+    color: #0b628f;
+    font: 850 .78rem/1.15 Inter, "Segoe UI", Arial, sans-serif;
+    cursor: pointer;
+}
+
+.arp-card .arp-locate-button:hover,
+.arp-card .arp-locate-button:focus-visible {
+    outline: none;
+    border-color: #277fa8;
+    background: #eaf7fc;
+}
+
+.arp-card .arp-locate-button:disabled,
+.arp-card .arp-locate-button.is-loading {
+    opacity: .65;
+    cursor: wait;
+}
+
+/* Le bouton ajoute de la hauteur sous le champ : la liste de résultats descend. */
+.arp-search-results {
+    top: 116px;
+}
+
+@media (max-width: 680px) {
+    .arp-charts {
+        gap: 18px;
+        padding: 16px 8px 20px;
+    }
+
+    .arp-chart-card h3 {
+        padding: 16px 13px 7px;
+        font-size: .95rem;
+    }
+
+    .arp-chart {
+        min-height: 390px;
+        padding: 4px 6px 12px;
+    }
+
+    .arp-chart-viewport {
+        min-height: 360px;
+    }
+
+    .arp-chart-svg {
+        width: 1050px;
+        min-width: 1050px;
+        min-height: 360px;
+    }
+
+    .arp-chart-tooltip {
+        font-size: 11px;
+    }
+
+    .arp-card .arp-locate-button {
+        width: 100%;
+    }
+}
+
+
+/* v2.8.1 — graphiques en traits uniquement, sans zones remplies */
+.arp-chart-area,
+.arp-chart-wind-envelope {
+    display: none !important;
+    fill: none !important;
+    opacity: 0 !important;
+}
+
+.arp-chart-line {
+    stroke-width: 2.35 !important;
+    filter: none !important;
+}
+
+.arp-chart-point {
+    r: 4px;
+    fill: #fff !important;
+    stroke-width: 2.2 !important;
+}
+
+.arp-chart-point.arp-series-temperature { stroke: #df6c2f !important; }
+.arp-chart-point.arp-series-pressure { stroke: #6758b3 !important; }
+.arp-chart-point.arp-series-wind { stroke: #197e91 !important; }
+.arp-chart-point.arp-series-gust { stroke: #db7b25 !important; }
+.arp-chart-point.arp-series-rain-cumulative { stroke: #316b9d !important; }
+
+.arp-chart-day-band {
+    opacity: .20 !important;
+}
+
+
+/* v2.8.2 — correctif définitif des courbes SVG */
+.arp-chart-svg path.arp-chart-line,
+.arp-chart-svg .arp-chart-line {
+    fill: none !important;
+}
+
+/* Le cumul des précipitations est centré sous le titre du graphique. */
+.arp-chart-card .arp-chart-total {
+    width: auto;
+    margin: 4px auto 8px !important;
+    padding: 0 16px;
+    text-align: center !important;
+}
+
+.arp-plugin-version {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 8px;
+    border: 1px solid #cfdde4;
+    border-radius: 999px;
+    background: #f7fafb;
+    color: #607985;
+    font-size: .68rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+
+/* v2.8.3 — journées nettement identifiables dans les diagrammes */
+.arp-chart-day-band {
+    opacity: .38 !important;
+}
+
+.arp-chart-day-strip {
+    pointer-events: none;
+    opacity: .94;
+}
+.arp-daystrip-mon { fill: #9cc9f3; }
+.arp-daystrip-tue { fill: #9bd3a5; }
+.arp-daystrip-wed { fill: #f5bd7c; }
+.arp-daystrip-thu { fill: #c3a7e5; }
+.arp-daystrip-fri { fill: #8ed4cb; }
+.arp-daystrip-sat { fill: #e9a9c8; }
+.arp-daystrip-sun { fill: #efd26e; }
+.arp-daystrip-other { fill: #c8d4da; }
+
+.arp-chart-day-separator {
+    pointer-events: none;
+    stroke-width: 2.2;
+    stroke-dasharray: 5 4;
+    opacity: .72;
+}
+.arp-dayseparator-mon { stroke: #4c8bc5; }
+.arp-dayseparator-tue { stroke: #4c925a; }
+.arp-dayseparator-wed { stroke: #c57a25; }
+.arp-dayseparator-thu { stroke: #7f5cac; }
+.arp-dayseparator-fri { stroke: #388d83; }
+.arp-dayseparator-sat { stroke: #b25f87; }
+.arp-dayseparator-sun { stroke: #ad8617; }
+.arp-dayseparator-other { stroke: #8399a3; }
+
+.arp-chart-day-label {
+    font-size: 12px !important;
+    font-weight: 950 !important;
+    letter-spacing: .035em !important;
+    paint-order: stroke;
+    stroke: rgba(255,255,255,.82);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+}
+
+@media (max-width: 720px) {
+    .arp-chart-day-label {
+        font-size: 11px !important;
+    }
+}
+/* v2.8.5 — courbes simplifiées : sans points visibles, jours plus gros, meilleure échelle */
+.arp-chart-value-label {
+    display: none !important;
+}
+
+.arp-chart-point,
+.arp-chart-hitpoint {
+    vector-effect: non-scaling-stroke;
+}
+
+.arp-chart-point {
+    display: none !important;
+}
+
+.arp-chart-hitpoint {
+    fill: transparent !important;
+    stroke: none !important;
+    opacity: 0 !important;
+    pointer-events: all !important;
+}
+
+.arp-chart-line {
+    fill: none !important;
+    stroke-width: 2.8 !important;
+}
+
+.arp-chart-day-strip {
+    height: 46px;
+    opacity: 1 !important;
+}
+
+.arp-chart-day-label {
+    font-size: 24px !important;
+    font-weight: 1000 !important;
+    letter-spacing: .01em !important;
+    stroke-width: 3px !important;
+}
+
+.arp-chart-axis {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+}
+
+.arp-chart-xaxis {
+    font-size: 15px !important;
+}
+
+.arp-chart-grid {
+    opacity: .72;
+}
+
+@media (max-width: 900px) {
+    .arp-chart-day-label {
+        font-size: 19px !important;
+    }
+    .arp-chart-axis {
+        font-size: 14px !important;
+    }
+    .arp-chart-xaxis {
+        font-size: 13px !important;
+    }
+}
+
+
+/* v2.8.7 — échelle pluie pilotée par le cumul + plus d'air en haut des courbes */
+.arp-chart-day-label {
+    font-size: 26px !important;
+    font-weight: 1000 !important;
+}
+
+.arp-chart-day-strip {
+    opacity: 1 !important;
+}
+
+@media (max-width: 900px) {
+    .arp-chart-day-label {
+        font-size: 20px !important;
+    }
+}
+
+/* Module ARPEGE unique : la carte partage la carte principale et ses onglets. */
+.arp-map-panel {
+    padding: 0 !important;
+}
+
+.arp-map-panel > .arpm-card {
+    margin: 0;
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.arp-map-panel .arpm-header,
+.arp-map-panel .arpm-card > .arp-footer {
+    display: none;
+}
+
+.arp-map-panel .arpm-toolbar {
+    border-radius: 0;
+}
+
+.arp-tab-map {
+    color: #173f78;
+}
