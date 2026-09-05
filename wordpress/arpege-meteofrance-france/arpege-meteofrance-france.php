@@ -3,7 +3,7 @@
  * Plugin Name: ARPEGE Météo-France France — Tableaux et cartes
  * Plugin URI: https://github.com/alertesmeteo-hub/arpege-meteo-france
  * Description: Module unique de cartes interactives et de prévisions ARPEGE de Météo-France pour la France métropolitaine et la Corse.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Alertes Météo Hub
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -14,7 +14,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ARP_VERSION', '1.1.0');
+define('ARP_VERSION', '1.2.0');
 define('ARP_RELEASE_DATE', '05/09/2026');
 define('ARP_OPTION_BASE_URL', 'arp_national_data_base_url');
 define(

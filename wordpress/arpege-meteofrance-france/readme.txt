@@ -3,7 +3,7 @@ Contributors: alertesmeteo
 Tags: meteo, arpege, meteofrance, carte, previsions, avada
 Requires at least: 5.8
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,20 @@ l'activation simultanée des deux modules sans collision.
 4. Insérez [arpege_meteo] dans un bloc Avada.
 
 == Changelog ==
+
+= 1.2.0 =
+* Le pipeline de production (dépôt GitHub, pas ce plugin) peut désormais
+  utiliser l'API officielle Météo-France (portail-api.meteofrance.fr,
+  abonnement "Modèle ARPÈGE API v1.0") comme source de données à la place du
+  scraping data.gouv.fr, dès qu'une clé API est configurée côté GitHub
+  Actions. Repli automatique sur data.gouv.fr en cas de problème.
+* Débloque, uniquement quand la source API est active, les couches vent/
+  température/humidité à 850/500/300 hPa, géopotentiel à 850/500 hPa,
+  vitesse verticale à 500 hPa, CIN et vent à 100 m — jusqu'ici marquées
+  indisponibles faute d'accès aux paquets isobares/hauteur.
+* Aucun changement côté ce plugin WordPress lui-même (affichage, shortcode) :
+  les nouvelles couches apparaissent automatiquement dans le sélecteur de
+  carte dès qu'elles sont publiées par le pipeline.
 
 = 1.1.0 =
 * Bouton de la barre d'outils renommé « 📷 Outil capture » (était « 🔍 Zoom

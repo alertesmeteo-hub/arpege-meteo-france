@@ -35,11 +35,19 @@ jobs:
 
       - name: Produire les cartes et les prévisions ARPEGE
         id: build
+        env:
+          # Clé API du portail portail-api.meteofrance.fr (abonnement payant
+          # "Modèle ARPÈGE API v1.0"). Si absente ou invalide, le pipeline
+          # retombe automatiquement sur le scraping data.gouv.fr historique
+          # (--source auto, cf. update_arpege_france.py). Créer ce secret
+          # dans Settings → Secrets and variables → Actions.
+          METEOFRANCE_API_KEY: ${{ secrets.METEOFRANCE_API_KEY }}
         run: |
           python scripts/update_arpege_france.py \
             --catalog config/communes-france.json \
             --output-dir build/national \
             --forecast-hours 102 \
+            --source auto \
             --current-metadata-url \
             "https://raw.githubusercontent.com/${{ github.repository }}/data/index.json"
           if test -f build/national/index.json; then

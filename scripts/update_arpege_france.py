@@ -34,15 +34,33 @@ from eccodes import (
     codes_get_double_array,
     codes_get_double_elements,
     codes_grib_new_from_file,
+    codes_new_from_message,
     codes_release,
 )
 from scipy.ndimage import map_coordinates
 
 from arpege_maps import DEFAULT_BOUNDS, ArpegeMapRenderer
 
+try:
+    from meteofrance_wcs_client import (
+        MeteoFranceWCSAuthError,
+        MeteoFranceWCSError,
+    )
+    from arpege_api_source import (
+        ARPEGE_API_PRECISION_DEGREES,
+        ARPEGE_API_TERRITORY,
+        GRAVITY as API_GRAVITY,
+        ApiRunResult,
+        fetch_arpege_api_run,
+    )
+
+    API_SOURCE_AVAILABLE = True
+except ImportError:  # pragma: no cover - modules toujours livrés ensemble
+    API_SOURCE_AVAILABLE = False
+
 
 LOGGER = logging.getLogger("arpege.france")
-PIPELINE_VERSION = "1.1.0"
+PIPELINE_VERSION = "1.2.0"
 DATASET_API = (
     "https://www.data.gouv.fr/api/1/datasets/"
     "paquets-arpege-resolution-0-1deg/"
@@ -53,16 +71,37 @@ DEFAULT_CURRENT_METADATA_URL = (
     "arpege-meteo-france/data/index.json"
 )
 USER_AGENT = "alertes-meteo.com/arpege-meteofrance-france/1.0"
+METEOFRANCE_API_KEY_ENV = "METEOFRANCE_API_KEY"
+
+
+@dataclass(frozen=True)
+class GridSpec:
+    """Décrit une grille régulière lat/lon (Ni×Nj points, pas constant).
+
+    Généralisé en v1.2.0 pour permettre à la source API officielle
+    Météo-France (ARPEGE-005-EURAT, 0,05°) de fonctionner à côté de la grille
+    historique EURAT01 0,1° de data.gouv.fr, sans dupliquer toute la logique
+    d'extraction/interpolation.
+    """
+
+    ni: int
+    nj: int
+    lat_first: float
+    lon_first: float
+    step: float
+
 
 # Grille EURAT01 (domaine Euro-Atlantique, 0,1°) documentée par Météo-France :
 # 20°N-72°N, -32°E-42°E. La cohérence avec les en-têtes GRIB2 réels est
-# vérifiée à chaque téléchargement (cf. validate_grid plus bas) ; ajuster ces
-# constantes si data.gouv.fr publie un domaine légèrement différent.
-ARPEGE_NI = 741
-ARPEGE_NJ = 521
-ARPEGE_LAT_FIRST = 72.0
-ARPEGE_LON_FIRST = -32.0
-ARPEGE_STEP = 0.1
+# vérifiée à chaque téléchargement (cf. NationalGrid.validate plus bas) ;
+# c'est la grille utilisée par la source historique data.gouv.fr (fallback).
+LEGACY_GRID = GridSpec(ni=741, nj=521, lat_first=72.0, lon_first=-32.0, step=0.1)
+# Alias conservés pour compatibilité (tests, scripts externes éventuels).
+ARPEGE_NI = LEGACY_GRID.ni
+ARPEGE_NJ = LEGACY_GRID.nj
+ARPEGE_LAT_FIRST = LEGACY_GRID.lat_first
+ARPEGE_LON_FIRST = LEGACY_GRID.lon_first
+ARPEGE_STEP = LEGACY_GRID.step
 
 MAP_WIDTH = 2200
 MAP_HEIGHT = 1640
@@ -112,6 +151,21 @@ VALUE_COLUMNS = (
     "latent_heat_mjm2",
     "solar_radiation_down_wm2",
     "thermal_radiation_down_wm2",
+    # Champs d'altitude ajoutés v1.2.0 (source API Météo-France uniquement ;
+    # restent null pour tout run produit depuis le fallback data.gouv.fr).
+    "temperature_850_c",
+    "temperature_500_c",
+    "temperature_300_c",
+    "wind_speed_850_kmh",
+    "wind_speed_500_kmh",
+    "wind_speed_300_kmh",
+    "wind_speed_100m_kmh",
+    "humidity_850_pct",
+    "humidity_500_pct",
+    "geopotential_850_m",
+    "geopotential_500_m",
+    "vertical_velocity_500_pas",
+    "cin_jkg",
 )
 
 INTEGER_COLUMNS = {
@@ -136,6 +190,15 @@ INTEGER_COLUMNS = {
     "snow_stick_risk_code",
     "snow_phase_code",
     "boundary_layer_height_m",
+    "wind_speed_850_kmh",
+    "wind_speed_500_kmh",
+    "wind_speed_300_kmh",
+    "wind_speed_100m_kmh",
+    "humidity_850_pct",
+    "humidity_500_pct",
+    "geopotential_850_m",
+    "geopotential_500_m",
+    "cin_jkg",
 }
 
 MAP_FIELDS = {
@@ -171,6 +234,19 @@ MAP_FIELDS = {
     "latent_heat_mjm2",
     "solar_radiation_down_wm2",
     "thermal_radiation_down_wm2",
+    "temperature_850_c",
+    "temperature_500_c",
+    "temperature_300_c",
+    "wind_speed_850_kmh",
+    "wind_speed_500_kmh",
+    "wind_speed_300_kmh",
+    "wind_speed_100m_kmh",
+    "humidity_850_pct",
+    "humidity_500_pct",
+    "geopotential_850_m",
+    "geopotential_500_m",
+    "vertical_velocity_500_pas",
+    "cin_jkg",
 }
 
 CONDITION_CODES = {
@@ -302,6 +378,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force la reconstruction même si ce run est déjà publié",
     )
+    parser.add_argument(
+        "--source",
+        choices=("auto", "api", "legacy"),
+        default="auto",
+        help=(
+            "Source des données : 'api' force l'API officielle Météo-France "
+            "(nécessite METEOFRANCE_API_KEY, échoue si indisponible), "
+            "'legacy' force le scraping data.gouv.fr historique, 'auto' "
+            "(défaut) utilise l'API si une clé est configurée et retombe "
+            "automatiquement sur data.gouv.fr en cas d'échec"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -343,18 +431,20 @@ def grib_datetime(gid: int, date_key: str, time_key: str) -> datetime | None:
         return None
 
 
-def grid_index(latitude: float, longitude: float) -> tuple[int, float, float]:
-    row = int(round((ARPEGE_LAT_FIRST - latitude) / ARPEGE_STEP))
-    column = int(round((longitude - ARPEGE_LON_FIRST) / ARPEGE_STEP))
-    row = max(0, min(ARPEGE_NJ - 1, row))
-    column = max(0, min(ARPEGE_NI - 1, column))
-    index = row * ARPEGE_NI + column
-    model_latitude = ARPEGE_LAT_FIRST - row * ARPEGE_STEP
-    model_longitude = ARPEGE_LON_FIRST + column * ARPEGE_STEP
+def grid_index(
+    latitude: float, longitude: float, grid: GridSpec = LEGACY_GRID
+) -> tuple[int, float, float]:
+    row = int(round((grid.lat_first - latitude) / grid.step))
+    column = int(round((longitude - grid.lon_first) / grid.step))
+    row = max(0, min(grid.nj - 1, row))
+    column = max(0, min(grid.ni - 1, column))
+    index = row * grid.ni + column
+    model_latitude = grid.lat_first - row * grid.step
+    model_longitude = grid.lon_first + column * grid.step
     return index, model_latitude, model_longitude
 
 
-def load_catalog(path: Path) -> NationalCatalog:
+def load_catalog(path: Path, grid: GridSpec = LEGACY_GRID) -> NationalCatalog:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     raw_communes = payload.get("communes") or []
@@ -369,7 +459,7 @@ def load_catalog(path: Path) -> NationalCatalog:
         latitude = float(commune[5])
         longitude = float(commune[6])
         model_index, model_latitude, model_longitude = grid_index(
-            latitude, longitude
+            latitude, longitude, grid
         )
         mapped.append((commune, model_index, model_latitude, model_longitude))
         point_coordinates[model_index] = (model_latitude, model_longitude)
@@ -744,8 +834,9 @@ def message_field(gid: int) -> str | None:
 
 
 class NationalGrid:
-    def __init__(self, catalog: NationalCatalog) -> None:
+    def __init__(self, catalog: NationalCatalog, grid: GridSpec = LEGACY_GRID) -> None:
         self.catalog = catalog
+        self.grid = grid
         self.validated = False
 
     def validate(self, gid: int) -> None:
@@ -757,14 +848,16 @@ class NationalGrid:
         lon_first = float(safe_get(gid, "longitudeOfFirstGridPointInDegrees", 0))
         lon_first = (lon_first + 180.0) % 360.0 - 180.0
         if (
-            ni != ARPEGE_NI
-            or nj != ARPEGE_NJ
-            or not math.isclose(lat_first, ARPEGE_LAT_FIRST, abs_tol=1.0e-6)
-            or not math.isclose(lon_first, ARPEGE_LON_FIRST, abs_tol=1.0e-6)
+            ni != self.grid.ni
+            or nj != self.grid.nj
+            or not math.isclose(lat_first, self.grid.lat_first, abs_tol=1.0e-6)
+            or not math.isclose(lon_first, self.grid.lon_first, abs_tol=1.0e-6)
         ):
             raise RuntimeError(
-                "La grille reçue n'est pas ARPEGE EURAT01 0,1° "
-                f"({ni} × {nj}, premier point {lat_first}/{lon_first})"
+                "La grille reçue ne correspond pas à la grille attendue "
+                f"({self.grid.ni} × {self.grid.nj}, premier point "
+                f"{self.grid.lat_first}/{self.grid.lon_first}) : reçu "
+                f"{ni} × {nj}, premier point {lat_first}/{lon_first}"
             )
         if max(self.catalog.model_indexes) >= ni * nj:
             raise RuntimeError("Un indice communal dépasse la grille ARPEGE")
@@ -788,9 +881,10 @@ def inverse_mercator(value: np.ndarray) -> np.ndarray:
 class MapSampler:
     """Rééchantillonne la grille régulière ARPEGE sur la carte Web Mercator."""
 
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int, height: int, grid: GridSpec = LEGACY_GRID) -> None:
         self.width = int(width)
         self.height = int(height)
+        self.grid = grid
         bounds = DEFAULT_BOUNDS
         target_latitudes = inverse_mercator(
             np.linspace(
@@ -802,17 +896,17 @@ class MapSampler:
         target_longitudes = np.linspace(
             float(bounds["west"]), float(bounds["east"]), self.width
         )
-        rows = (ARPEGE_LAT_FIRST - target_latitudes) / ARPEGE_STEP
-        columns = (target_longitudes - ARPEGE_LON_FIRST) / ARPEGE_STEP
+        rows = (grid.lat_first - target_latitudes) / grid.step
+        columns = (target_longitudes - grid.lon_first) / grid.step
         self.row_grid = np.broadcast_to(rows[:, None], (self.height, self.width))
         self.column_grid = np.broadcast_to(
             columns[None, :], (self.height, self.width)
         )
         self.coverage = (
             (self.row_grid >= 0)
-            & (self.row_grid <= ARPEGE_NJ - 1)
+            & (self.row_grid <= grid.nj - 1)
             & (self.column_grid >= 0)
-            & (self.column_grid <= ARPEGE_NI - 1)
+            & (self.column_grid <= grid.ni - 1)
         )
 
     def extract(self, gid: int, validator: NationalGrid) -> np.ndarray:
@@ -820,7 +914,7 @@ class MapSampler:
         values = mask_missing(
             codes_get_double_array(gid, "values"),
             safe_get(gid, "missingValue"),
-        ).reshape(ARPEGE_NJ, ARPEGE_NI)
+        ).reshape(self.grid.nj, self.grid.ni)
         sampled = map_coordinates(
             values,
             [self.row_grid, self.column_grid],
@@ -883,6 +977,76 @@ def parse_grib_files(
                     bucket["map_values"][field] = map_sampler.extract(gid, grid)
                 finally:
                     codes_release(gid)
+
+    for lead_hour, bucket in steps.items():
+        if bucket["valid_time"] is None and bucket["run_time"] is not None:
+            bucket["valid_time"] = bucket["run_time"] + timedelta(hours=lead_hour)
+    return steps
+
+
+def decode_api_run_result(
+    api_result: "ApiRunResult",
+    grid: NationalGrid,
+    map_sampler: MapSampler,
+) -> dict[int, dict[str, Any]]:
+    """Décode les messages GRIB2 téléchargés via l'API officielle Météo-France.
+
+    Contrairement à ``parse_grib_files`` (qui associe un champ à un message
+    via son ``shortName`` GRIB, cf. ``message_field``), chaque message ici est
+    déjà associé à son nom de champ interne par construction (une requête
+    ``GetCoverage`` = un champ demandé explicitement), donc aucune
+    correspondance heuristique n'est nécessaire — seule la conversion
+    géopotentiel → hauteur (÷ g) reste appliquée si besoin.
+
+    Non testé en conditions réelles (cf. arpege_api_source.py) : suppose que
+    ``codes_new_from_message`` (eccodes) décode correctement un GRIB2 unique
+    reçu en mémoire, comme le fait le client communautaire meteole avec
+    cfgrib sur le même flux ``application/wmo-grib``.
+    """
+
+    steps: dict[int, dict[str, Any]] = {}
+    for lead_hour, fields in api_result.payload.items():
+        bucket = steps.setdefault(
+            lead_hour,
+            {
+                "lead_hour": lead_hour,
+                "run_time": api_result.run_time,
+                "valid_time": None,
+                "values": {},
+                "map_values": {},
+            },
+        )
+        for field_name, raw_message in fields.items():
+            gid = codes_new_from_message(raw_message)
+            if gid is None:
+                LOGGER.warning(
+                    "Message GRIB2 vide pour %s à +%03d h (réponse API "
+                    "ignorée)",
+                    field_name,
+                    lead_hour,
+                )
+                continue
+            try:
+                bucket["run_time"] = bucket["run_time"] or grib_datetime(
+                    gid, "dataDate", "dataTime"
+                )
+                bucket["valid_time"] = bucket["valid_time"] or grib_datetime(
+                    gid, "validityDate", "validityTime"
+                )
+                point_values = grid.extract(gid)
+                map_values = map_sampler.extract(gid, grid)
+                resolved = api_result.resolved_fields.get(field_name)
+                if resolved is not None and resolved.request.geopotential_to_height:
+                    # Ne divise que si l'indicateur résolu est bien le
+                    # géopotentiel brut (m²/s²) et non déjà une hauteur
+                    # géopotentielle (m) — cf. FieldRequest.
+                    if "GEOPOTENTIAL_HEIGHT" not in resolved.indicator.upper():
+                        point_values = point_values / API_GRAVITY
+                        map_values = map_values / API_GRAVITY
+                bucket["values"][field_name] = point_values
+                bucket["map_values"][field_name] = map_values
+            finally:
+                codes_release(gid)
 
     for lead_hour, bucket in steps.items():
         if bucket["valid_time"] is None and bucket["run_time"] is not None:
@@ -958,6 +1122,38 @@ def transform_step(
     thermal_radiation_down = np.maximum(
         array_like(raw, "thermal_radiation_down_wm2", shape), 0.0
     )
+
+    # Champs d'altitude ajoutés en v1.2.0, fournis uniquement par la source
+    # API officielle Météo-France (ARPEGE-005-EURAT-WCS) : absents de
+    # data.gouv.fr, ils restent à NaN (donc les couches correspondantes ne
+    # sont tout simplement pas publiées) tant que le run n'a pas été produit
+    # via l'API. Cf. arpege_api_source.py pour la résolution des indicateurs.
+    temperature_850 = array_like(raw, "temperature_850_k", shape) - 273.15
+    temperature_500 = array_like(raw, "temperature_500_k", shape) - 273.15
+    temperature_300 = array_like(raw, "temperature_300_k", shape) - 273.15
+    wind_speed_850 = np.hypot(
+        array_like(raw, "wind_u_850_ms", shape), array_like(raw, "wind_v_850_ms", shape)
+    ) * 3.6
+    wind_speed_500 = np.hypot(
+        array_like(raw, "wind_u_500_ms", shape), array_like(raw, "wind_v_500_ms", shape)
+    ) * 3.6
+    wind_speed_300 = np.hypot(
+        array_like(raw, "wind_u_300_ms", shape), array_like(raw, "wind_v_300_ms", shape)
+    ) * 3.6
+    wind_speed_100m = np.hypot(
+        array_like(raw, "wind_u_100m_ms", shape), array_like(raw, "wind_v_100m_ms", shape)
+    ) * 3.6
+    humidity_850 = np.clip(array_like(raw, "humidity_850_pct", shape), 0, 100)
+    humidity_500 = np.clip(array_like(raw, "humidity_500_pct", shape), 0, 100)
+    # Le WCS Météo-France expose "GEOPOTENTIAL" (m²/s², à diviser par g) ou
+    # directement "GEOPOTENTIAL_HEIGHT" (m) selon l'indicateur réellement
+    # résolu par arpege_api_source.py ; celui-ci normalise systématiquement
+    # vers des mètres avant d'écrire "geopotential_*_gpm", donc aucune
+    # division supplémentaire n'est nécessaire ici.
+    geopotential_850 = array_like(raw, "geopotential_850_gpm", shape)
+    geopotential_500 = array_like(raw, "geopotential_500_gpm", shape)
+    vertical_velocity_500 = array_like(raw, "vertical_velocity_500_pas", shape)
+    cin = np.maximum(array_like(raw, "cin_jkg", shape), 0.0)
 
     precipitation, rain_total = accumulation(
         raw,
@@ -1155,6 +1351,20 @@ def transform_step(
         "latent_heat_mjm2": rounded(latent_total / 1.0e6, 2),
         "solar_radiation_down_wm2": rounded(solar_radiation_down, 0),
         "thermal_radiation_down_wm2": rounded(thermal_radiation_down, 0),
+        # Champs d'altitude v1.2.0 (API Météo-France uniquement, cf. plus haut)
+        "temperature_850_c": rounded(temperature_850, 1),
+        "temperature_500_c": rounded(temperature_500, 1),
+        "temperature_300_c": rounded(temperature_300, 1),
+        "wind_speed_850_kmh": rounded(wind_speed_850, 0),
+        "wind_speed_500_kmh": rounded(wind_speed_500, 0),
+        "wind_speed_300_kmh": rounded(wind_speed_300, 0),
+        "wind_speed_100m_kmh": rounded(wind_speed_100m, 0),
+        "humidity_850_pct": rounded(humidity_850, 0),
+        "humidity_500_pct": rounded(humidity_500, 0),
+        "geopotential_850_m": rounded(geopotential_850, 0),
+        "geopotential_500_m": rounded(geopotential_500, 0),
+        "vertical_velocity_500_pas": rounded(vertical_velocity_500, 3),
+        "cin_jkg": rounded(cin, 0),
     }
     state = {
         "rain_total": rain_total,
@@ -1298,12 +1508,16 @@ def write_departments(
 
 
 def build_product(
-    resources: dict[tuple[str, int, int], Resource],
+    resources: dict[tuple[str, int, int], Resource] | None,
     catalog: NationalCatalog,
     forecast_hours: int,
     session: requests.Session,
     working_directory: Path,
     run_hint: datetime | None,
+    *,
+    grid_spec: GridSpec = LEGACY_GRID,
+    api_result: "ApiRunResult | None" = None,
+    source_label: str = "data.gouv.fr",
 ) -> Path:
     result_directory = working_directory / "result"
     forecast_directory = working_directory / "forecast-lines"
@@ -1316,8 +1530,8 @@ def build_product(
         code: (forecast_directory / f"{code}.ndjson").open("w", encoding="utf-8")
         for code in catalog.departments
     }
-    grid = NationalGrid(catalog)
-    map_sampler = MapSampler(MAP_WIDTH, MAP_HEIGHT)
+    grid = NationalGrid(catalog, grid_spec)
+    map_sampler = MapSampler(MAP_WIDTH, MAP_HEIGHT, grid_spec)
     map_renderer = ArpegeMapRenderer(
         np.empty(0),
         np.empty(0),
@@ -1343,26 +1557,42 @@ def build_product(
     # Un même paquet (ex. SP1 000H012H) couvre plusieurs échéances : on le
     # télécharge une seule fois, puis on répartit ses messages GRIB par
     # échéance réelle plutôt que de retélécharger un fichier par heure.
-    unique_resources: dict[tuple[str, int, int], Resource] = dict(resources.items())
+    # (chemin data.gouv.fr uniquement ; le chemin API ne télécharge pas de
+    # fichiers sur disque, cf. decode_api_run_result plus bas)
+    unique_resources: dict[tuple[str, int, int], Resource] = (
+        dict(resources.items()) if resources else {}
+    )
     downloaded_paths: list[Path] = []
     try:
-        for (group, lead_start, lead_end), resource in sorted(
-            unique_resources.items(), key=lambda item: (item[0][0], item[0][1])
-        ):
-            destination = downloads / f"{group}-{lead_start:03d}H{lead_end:03d}H.grib2"
+        if api_result is not None:
             LOGGER.info(
-                "Téléchargement %s +%03d h à +%03d h (%.1f Mo)",
-                group,
-                lead_start,
-                lead_end,
-                (resource.size or 0) / 1e6,
+                "Décodage GRIB2 ARPEGE (source API Météo-France, %s requêtes, "
+                "%.1f Mo)",
+                api_result.request_count,
+                api_result.byte_count / 1e6,
             )
-            download_resource(session, resource, destination)
-            source_bytes += destination.stat().st_size
-            downloaded_paths.append(destination)
+            steps_by_lead = decode_api_run_result(api_result, grid, map_sampler)
+            source_bytes += api_result.byte_count
+        else:
+            for (group, lead_start, lead_end), resource in sorted(
+                unique_resources.items(), key=lambda item: (item[0][0], item[0][1])
+            ):
+                destination = (
+                    downloads / f"{group}-{lead_start:03d}H{lead_end:03d}H.grib2"
+                )
+                LOGGER.info(
+                    "Téléchargement %s +%03d h à +%03d h (%.1f Mo)",
+                    group,
+                    lead_start,
+                    lead_end,
+                    (resource.size or 0) / 1e6,
+                )
+                download_resource(session, resource, destination)
+                source_bytes += destination.stat().st_size
+                downloaded_paths.append(destination)
 
-        LOGGER.info("Décodage GRIB2 ARPEGE (%s paquets)", len(downloaded_paths))
-        steps_by_lead = parse_grib_files(downloaded_paths, grid, map_sampler)
+            LOGGER.info("Décodage GRIB2 ARPEGE (%s paquets)", len(downloaded_paths))
+            steps_by_lead = parse_grib_files(downloaded_paths, grid, map_sampler)
 
         available_leads = sorted(
             lead for lead in steps_by_lead if lead <= forecast_hours
@@ -1452,23 +1682,44 @@ def build_product(
         generated_at,
     )
 
+    is_api_source = api_result is not None
     model = {
-        "name": "ARPEGE Europe 0,1°",
+        "name": (
+            "ARPEGE Euro-Atlantique 0,05° (API Météo-France)"
+            if is_api_source
+            else "ARPEGE Europe 0,1°"
+        ),
         "provider": "Météo-France",
-        "dataset": "Paquets ARPEGE résolution 0,1°",
-        "domain": "EURAT01",
-        "resolution_degrees": 0.1,
-        "resolution_km": 10,
+        "dataset": (
+            "API officielle Météo-France — Modèle ARPÈGE API v1.0 "
+            "(MF-NWP-GLOBAL-ARPEGE-005-EURAT-WCS)"
+            if is_api_source
+            else "Paquets ARPEGE résolution 0,1°"
+        ),
+        "domain": "EURAT" if is_api_source else "EURAT01",
+        "resolution_degrees": grid_spec.step,
+        "resolution_km": round(grid_spec.step * 111.0, 1),
         "forecast_hours_requested": forecast_hours,
         "run_time": run_time,
         "pipeline_version": PIPELINE_VERSION,
         "catalog_version": catalog.version,
         "storm_diagnostics": True,
         "snow_diagnostics": True,
-        "source_url": DATASET_PAGE,
+        "source": source_label,
+        "source_url": (
+            "https://portail-api.meteofrance.fr/web/fr/api/arpege"
+            if is_api_source
+            else DATASET_PAGE
+        ),
         "source_size_bytes": source_bytes,
-        "license": "Licence Ouverte 2.0",
+        "license": (
+            "Licence des données Météo-France (portail API, abonnement "
+            "payant)" if is_api_source else "Licence Ouverte 2.0"
+        ),
     }
+    if is_api_source:
+        model["api_resolved_fields"] = sorted(api_result.resolved_fields)
+        model["api_missing_fields"] = sorted(api_result.missing_fields)
     index = {
         "schema_version": 3,
         "status": "ok",
@@ -1502,17 +1753,32 @@ def build_product(
                 "risque grêle (CAPE)",
                 "phase et tenue de la neige",
             ],
-            "unavailable": [
-                "réflectivité radar (absente des paquets SP1/SP2)",
-                "graupel (absent des paquets SP1/SP2)",
-                "visibilité 2 m (absente des paquets SP1/SP2 ; seule la "
-                "visibilité isobare IP2 existe, non intégrée)",
-                "densité de foudre (non produite par le PNT ARPEGE)",
-                "CIN, SBCAPE distinct, vent/température/humidité en "
-                "altitude, géopotentiel, ISO 0/-10/-20°C, vitesse "
-                "verticale, tourbillon/vorticité/divergence (nécessitent "
-                "les paquets IP1-4/HP1-2, non téléchargés par ce pipeline)",
-            ],
+            "unavailable": (
+                [
+                    "réflectivité radar (absente des paquets SP1/SP2)",
+                    "graupel (absent des paquets SP1/SP2)",
+                    "visibilité 2 m (absente des paquets SP1/SP2 ; seule la "
+                    "visibilité isobare IP2 existe, non intégrée)",
+                    "densité de foudre (non produite par le PNT ARPEGE)",
+                    "ISO 0/-10/-20°C, vorticité/divergence (nécessitent un "
+                    "profil vertical complet, non encore calculés même via "
+                    "l'API)",
+                ]
+                if is_api_source
+                else [
+                    "réflectivité radar (absente des paquets SP1/SP2)",
+                    "graupel (absent des paquets SP1/SP2)",
+                    "visibilité 2 m (absente des paquets SP1/SP2 ; seule la "
+                    "visibilité isobare IP2 existe, non intégrée)",
+                    "densité de foudre (non produite par le PNT ARPEGE)",
+                    "CIN, vent/température/humidité en altitude, "
+                    "géopotentiel, ISO 0/-10/-20°C, vitesse verticale, "
+                    "vorticité/divergence, vent à 100 m (nécessitent l'API "
+                    "officielle Météo-France payante — disponibles "
+                    "seulement quand METEOFRANCE_API_KEY est configurée, "
+                    "cf. README)",
+                ]
+            ),
         },
         "search": {
             "provider": "API Découpage administratif — République française",
@@ -1549,6 +1815,56 @@ def safe_output_directory(path: Path) -> Path:
     return resolved
 
 
+def api_grid_spec(
+    domain: tuple[float, float, float, float], precision_degrees: float
+) -> GridSpec:
+    """Construit la grille implicite d'un run ARPEGE API à partir du domaine
+    demandé (min_lat, max_lat, min_lon, max_lon) et de la résolution
+    (0,05° pour EURAT). Le premier message GRIB2 réellement décodé confirme
+    ou infirme cette hypothèse via ``NationalGrid.validate`` (échec explicite
+    plutôt qu'un décalage silencieux)."""
+
+    min_lat, max_lat, min_lon, max_lon = domain
+    nj = int(round((max_lat - min_lat) / precision_degrees)) + 1
+    ni = int(round((max_lon - min_lon) / precision_degrees)) + 1
+    return GridSpec(
+        ni=ni, nj=nj, lat_first=max_lat, lon_first=min_lon, step=precision_degrees
+    )
+
+
+def build_via_api(
+    catalog_path: Path,
+    forecast_hours: int,
+    api_key: str,
+) -> tuple[NationalCatalog, "ApiRunResult", GridSpec] | None:
+    """Tente un run complet via l'API officielle Météo-France.
+
+    Retourne ``None`` si l'API n'est pas utilisable (aucune clé, échec de
+    résolution des indicateurs requis, erreur réseau/auth persistante) afin
+    de laisser l'appelant retomber sur data.gouv.fr.
+    """
+
+    if not API_SOURCE_AVAILABLE:
+        LOGGER.warning(
+            "Modules API Météo-France absents (meteofrance_wcs_client.py / "
+            "arpege_api_source.py) : source API indisponible"
+        )
+        return None
+    try:
+        api_result = fetch_arpege_api_run(api_key, forecast_hours)
+    except Exception as error:  # noqa: BLE001 - toute erreur doit déclencher le fallback
+        LOGGER.warning(
+            "Échec de la récupération ARPEGE via l'API Météo-France (%s : "
+            "%s) ; retour sur data.gouv.fr",
+            type(error).__name__,
+            error,
+        )
+        return None
+    grid = api_grid_spec(api_result.domain, api_result.precision_degrees)
+    catalog = load_catalog(catalog_path, grid)
+    return catalog, api_result, grid
+
+
 def publish_result(source: Path, destination: Path) -> None:
     target = safe_output_directory(destination)
     temporary = target.with_name(target.name + ".new")
@@ -1573,9 +1889,73 @@ def main() -> int:
     if not 0 <= args.catalog_retry_seconds <= 600:
         raise ValueError("catalog-retry-seconds doit être compris entre 0 et 600")
 
-    catalog = load_catalog(Path(args.catalog))
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
+
+    api_key = os.environ.get(METEOFRANCE_API_KEY_ENV, "").strip()
+    use_api = args.source == "api" or (args.source == "auto" and bool(api_key))
+    if args.source == "api" and not api_key:
+        raise RuntimeError(
+            f"--source api requiert la variable d'environnement "
+            f"{METEOFRANCE_API_KEY_ENV}"
+        )
+    if args.resource_directory:
+        # Le mode "GRIB locaux" (tests hors ligne) reste exclusivement
+        # data.gouv.fr : il n'a pas d'équivalent API à télécharger.
+        use_api = False
+
+    api_catalog: NationalCatalog | None = None
+    api_result: "ApiRunResult | None" = None
+    api_grid: GridSpec = LEGACY_GRID
+    if use_api:
+        LOGGER.info(
+            "Tentative de récupération ARPEGE via l'API officielle "
+            "Météo-France (%s)",
+            "EURAT 0,05°" if API_SOURCE_AVAILABLE else "modules indisponibles",
+        )
+        outcome = build_via_api(Path(args.catalog), args.forecast_hours, api_key)
+        if outcome is None:
+            if args.source == "api":
+                raise RuntimeError(
+                    "La source API Météo-France a échoué et --source api "
+                    "interdit le repli sur data.gouv.fr"
+                )
+            LOGGER.info("Repli sur la source data.gouv.fr historique")
+        else:
+            api_catalog, api_result, api_grid = outcome
+
+    if api_result is not None and api_catalog is not None:
+        run_hint = api_result.run_time
+        LOGGER.info(
+            "Run ARPEGE (API Météo-France) sélectionné : %s (%s champs "
+            "résolus, %s introuvables)",
+            iso_utc(run_hint) or "inconnu",
+            len(api_result.resolved_fields),
+            len(api_result.missing_fields),
+        )
+        if not args.force and already_published(args.current_metadata_url, run_hint):
+            LOGGER.info(
+                "Ce run ARPEGE est déjà publié ; aucune reconstruction nécessaire"
+            )
+            return 0
+        with tempfile.TemporaryDirectory(prefix="arpege-france-build-") as temporary:
+            result = build_product(
+                None,
+                api_catalog,
+                args.forecast_hours,
+                session,
+                Path(temporary),
+                run_hint,
+                grid_spec=api_grid,
+                api_result=api_result,
+                source_label="api.meteofrance.fr",
+            )
+            publish_result(result, Path(args.output_dir))
+        LOGGER.info("Fichiers nationaux prêts dans %s (source API)", args.output_dir)
+        return 0
+
+    # --- Source historique : scraping data.gouv.fr (fallback ou --source legacy) ---
+    catalog = load_catalog(Path(args.catalog))
     if args.resource_directory:
         discovered = local_resources(Path(args.resource_directory))
         resources, run_hint = choose_resources(discovered, args.forecast_hours)
@@ -1604,9 +1984,10 @@ def main() -> int:
             session,
             Path(temporary),
             run_hint,
+            source_label="data.gouv.fr",
         )
         publish_result(result, Path(args.output_dir))
-    LOGGER.info("Fichiers nationaux prêts dans %s", args.output_dir)
+    LOGGER.info("Fichiers nationaux prêts dans %s (source data.gouv.fr)", args.output_dir)
     return 0
 
 

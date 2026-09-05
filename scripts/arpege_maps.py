@@ -24,7 +24,7 @@ from scipy.spatial import cKDTree
 
 
 MAP_SCHEMA_VERSION = 6
-MODULE_VERSION = "1.1.0"
+MODULE_VERSION = "1.2.0"
 # Une valeur numérique tous les deux pixels cartographiques : le survol reste
 # précis à l'échelle d'une commune sans multiplier déraisonnablement le poids
 # de la branche de données.
@@ -527,6 +527,18 @@ LAYER_SPECS = (
         group="Vent",
     ),
     LayerSpec(
+        "vent_100m",
+        "Vent à 100 m",
+        "km/h",
+        "wind_speed_100m_kmh",
+        (
+            (0, "#eef7ea"), (15, "#a7db8d"), (30, "#5cc27d"), (45, "#38aaa5"),
+            (60, "#347cc3"), (80, "#6558b8"), (100, "#a43e94"), (130, "#d63c57"),
+            (160, "#7e1736"),
+        ),
+        group="Vent",
+    ),
+    LayerSpec(
         "jet_stream",
         "Vent à 300 hPa (jet stream)",
         "km/h",
@@ -792,6 +804,30 @@ LAYER_SPECS = (
             (8, "#aa3049"),
         ),
         group="Autres",
+        decimals=2,
+    ),
+    LayerSpec(
+        "cin",
+        "CIN (inhibition convective)",
+        "J/kg",
+        "cin_jkg",
+        (
+            (0, "#f3f5f8"), (25, "#d8ebff"), (50, "#91c8ff"), (100, "#5c9be0"),
+            (150, "#536bc1"), (200, "#7048ac"), (300, "#963b92"),
+        ),
+        group="Instabilité",
+        transparent_below=1.0,
+    ),
+    LayerSpec(
+        "vitesse_verticale_500",
+        "Vitesse verticale à 500 hPa",
+        "Pa/s",
+        "vertical_velocity_500_pas",
+        (
+            (-3, "#8c1d74"), (-1.5, "#d5e52f"), (-0.3, "#91c8ff"),
+            (0, "#f3f5f8"), (0.3, "#ffc62d"), (1.5, "#ff7a22"), (3, "#e83028"),
+        ),
+        group="Instabilité",
         decimals=2,
     ),
     LayerSpec(
