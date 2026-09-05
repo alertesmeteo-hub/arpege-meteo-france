@@ -60,7 +60,7 @@ except ImportError:  # pragma: no cover - modules toujours livrés ensemble
 
 
 LOGGER = logging.getLogger("arpege.france")
-PIPELINE_VERSION = "1.2.0"
+PIPELINE_VERSION = "1.2.1"
 DATASET_API = (
     "https://www.data.gouv.fr/api/1/datasets/"
     "paquets-arpege-resolution-0-1deg/"
@@ -927,10 +927,63 @@ class MapSampler:
         return sampled
 
 
+class MapValueSpill:
+    """Décharge sur disque les champs cartographiques bruts par échéance.
+
+    ``parse_grib_files``/``decode_api_run_result`` décodaient auparavant TOUS
+    les champs cartographiques (déjà rééchantillonnés à la résolution de
+    rendu, ~14 Mo par champ en float32) de TOUTES les échéances en mémoire
+    avant même de commencer le rendu. L'ajout de 9 nouveaux champs SP1/SP2 et
+    le passage de +72 h (73 échéances) à +102 h (103 échéances) dans la
+    v1.1.0 a fait plus que doubler ce pic mémoire (~15 → ~22 champs × 73 → 103
+    échéances), le faisant dépasser la RAM du runner GitHub Actions
+    (~7 Go) : c'est la cause du "The operation was canceled" (OOM kill)
+    observé juste après le début du rendu, pas le tracé des frontières
+    communales (mesuré à ~230 Mo / 3 s, négligeable).
+
+    Cette classe conserve le dict ``steps`` en mémoire (structure et champs
+    ``values`` ponctuels, petits) mais écrit chaque tableau ``map_values`` sur
+    disque dès son extraction et ne le recharge qu'au moment du rendu de son
+    échéance, dans la boucle principale — le pic mémoire redevient de l'ordre
+    d'une seule échéance plutôt que de la totalité de la prévision.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = Path(directory)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self._counter = 0
+
+    def store(self, lead_hour: int, field: str, array: np.ndarray) -> Path:
+        self._counter += 1
+        destination = self.directory / f"{lead_hour:03d}_{field}_{self._counter}.npy"
+        np.save(destination, np.asarray(array, dtype=np.float32), allow_pickle=False)
+        return destination
+
+    @staticmethod
+    def load(reference: "np.ndarray | Path") -> np.ndarray:
+        if isinstance(reference, Path):
+            array = np.load(reference, allow_pickle=False)
+            try:
+                reference.unlink()
+            except OSError:
+                pass
+            return array
+        return reference
+
+    @staticmethod
+    def materialize(map_values: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Recharge en mémoire, puis supprime, les fichiers d'une échéance."""
+
+        return {
+            field: MapValueSpill.load(value) for field, value in map_values.items()
+        }
+
+
 def parse_grib_files(
     paths: Iterable[Path],
     grid: NationalGrid,
     map_sampler: MapSampler,
+    spill: "MapValueSpill | None" = None,
 ) -> dict[int, dict[str, Any]]:
     """Décode un ensemble de paquets GRIB2 ARPEGE et regroupe les messages
     par échéance réelle (``endStep``).
@@ -939,6 +992,10 @@ def parse_grib_files(
     plusieurs échéances et paramètres dans un même fichier ; il faut donc
     répartir chaque message GRIB dans le bon panier d'échéance plutôt que de
     supposer un fichier = une échéance.
+
+    Si ``spill`` est fourni, les tableaux ``map_values`` (les plus gros, déjà
+    à la résolution de rendu) sont écrits sur disque immédiatement plutôt que
+    conservés en mémoire pour les 100+ échéances — cf. ``MapValueSpill``.
     """
 
     steps: dict[int, dict[str, Any]] = {}
@@ -974,7 +1031,12 @@ def parse_grib_files(
                         gid, "validityDate", "validityTime"
                     )
                     bucket["values"][field] = grid.extract(gid)
-                    bucket["map_values"][field] = map_sampler.extract(gid, grid)
+                    map_array = map_sampler.extract(gid, grid)
+                    bucket["map_values"][field] = (
+                        spill.store(lead_hour, field, map_array)
+                        if spill is not None
+                        else map_array
+                    )
                 finally:
                     codes_release(gid)
 
@@ -988,6 +1050,7 @@ def decode_api_run_result(
     api_result: "ApiRunResult",
     grid: NationalGrid,
     map_sampler: MapSampler,
+    spill: "MapValueSpill | None" = None,
 ) -> dict[int, dict[str, Any]]:
     """Décode les messages GRIB2 téléchargés via l'API officielle Météo-France.
 
@@ -1044,7 +1107,11 @@ def decode_api_run_result(
                         point_values = point_values / API_GRAVITY
                         map_values = map_values / API_GRAVITY
                 bucket["values"][field_name] = point_values
-                bucket["map_values"][field_name] = map_values
+                bucket["map_values"][field_name] = (
+                    spill.store(lead_hour, field_name, map_values)
+                    if spill is not None
+                    else map_values
+                )
             finally:
                 codes_release(gid)
 
@@ -1553,6 +1620,11 @@ def build_product(
     map_state: dict[str, np.ndarray] = {}
     model_run = run_hint
     source_bytes = 0
+    # Cf. MapValueSpill : évite de garder les ~20 champs cartographiques des
+    # 103 échéances en mémoire simultanément (cause de l'OOM du runner
+    # GitHub Actions introduit en v1.1.0 par l'ajout de champs + le passage
+    # à +102 h).
+    map_value_spill = MapValueSpill(working_directory / "map-values")
 
     # Un même paquet (ex. SP1 000H012H) couvre plusieurs échéances : on le
     # télécharge une seule fois, puis on répartit ses messages GRIB par
@@ -1571,7 +1643,9 @@ def build_product(
                 api_result.request_count,
                 api_result.byte_count / 1e6,
             )
-            steps_by_lead = decode_api_run_result(api_result, grid, map_sampler)
+            steps_by_lead = decode_api_run_result(
+                api_result, grid, map_sampler, spill=map_value_spill
+            )
             source_bytes += api_result.byte_count
         else:
             for (group, lead_start, lead_end), resource in sorted(
@@ -1592,7 +1666,9 @@ def build_product(
                 downloaded_paths.append(destination)
 
             LOGGER.info("Décodage GRIB2 ARPEGE (%s paquets)", len(downloaded_paths))
-            steps_by_lead = parse_grib_files(downloaded_paths, grid, map_sampler)
+            steps_by_lead = parse_grib_files(
+                downloaded_paths, grid, map_sampler, spill=map_value_spill
+            )
 
         available_leads = sorted(
             lead for lead in steps_by_lead if lead <= forecast_hours
@@ -1606,6 +1682,11 @@ def build_product(
 
         for index, lead in enumerate(available_leads):
             step = steps_by_lead[lead]
+            # Recharge (et supprime du disque) les champs cartographiques de
+            # cette seule échéance — cf. MapValueSpill : ils ont été écrits
+            # sur disque au décodage pour ne jamais tenir en mémoire les ~20
+            # champs des 103 échéances simultanément.
+            step["map_values"] = MapValueSpill.materialize(step["map_values"])
             if "temperature_k" not in step["values"]:
                 raise RuntimeError(f"Température à 2 m absente de l'échéance +{lead:02d} h")
             if step["valid_time"] is None:
@@ -1646,6 +1727,14 @@ def build_product(
                 valid_time=step["valid_time"],
                 fields=map_fields,
             )
+            # Libère les tableaux cartographiques de cette échéance : sans
+            # ceci, `steps_by_lead` (qui reste référencé jusqu'à la fin de la
+            # fonction) reconstituerait progressivement en mémoire tout ce
+            # que MapValueSpill avait déchargé sur disque, ce qui annulerait
+            # le gain mémoire recherché.
+            step["map_values"] = None
+            map_fields = None
+            map_transformed = None
             iso_time = iso_utc(step["valid_time"])
             for code, department in catalog.departments.items():
                 line = [
@@ -1664,6 +1753,7 @@ def build_product(
             path.unlink(missing_ok=True)
         for handle in line_handles.values():
             handle.close()
+        shutil.rmtree(map_value_spill.directory, ignore_errors=True)
 
     generated_at = iso_utc(datetime.now(timezone.utc))
     assert generated_at is not None
