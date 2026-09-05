@@ -3,7 +3,7 @@
  * Plugin Name: ARPEGE Météo-France France — Tableaux et cartes
  * Plugin URI: https://github.com/alertesmeteo-hub/arpege-meteo-france
  * Description: Module unique de cartes interactives et de prévisions ARPEGE de Météo-France pour la France métropolitaine et la Corse.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Alertes Météo Hub
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -14,8 +14,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ARP_VERSION', '1.0.0');
-define('ARP_RELEASE_DATE', '04/09/2026');
+define('ARP_VERSION', '1.1.0');
+define('ARP_RELEASE_DATE', '05/09/2026');
 define('ARP_OPTION_BASE_URL', 'arp_national_data_base_url');
 define(
     'ARP_DEFAULT_BASE_URL',
@@ -285,8 +285,7 @@ function arp_map_variable($value) {
         'neige',
         'neige_au_sol',
         'equivalent_eau_neige',
-        'graupel',
-        'neige_graupel',
+        'eau_precipitable',
         'grele',
         'type_precipitation_severe',
         'vent',
@@ -299,8 +298,15 @@ function arp_map_variable($value) {
         'nuages_eleves',
         'humidite',
         'mucape',
-        'reflectivite',
         'altitude',
+        'temperature_min_2m',
+        'temperature_max_2m',
+        'temperature_surface',
+        'couche_limite',
+        'flux_sensible',
+        'flux_latent',
+        'rayonnement_solaire_descendant',
+        'rayonnement_thermique_descendant',
     );
     return in_array($variable, $allowed, true) ? $variable : 'temperature';
 }
@@ -374,8 +380,8 @@ function arp_render_map_shortcode($atts) {
                     class="arpm-tool-toggle"
                     data-arpm-tool="zoom"
                     aria-pressed="false"
-                    title="Afficher les outils de capture et d’épinglage"
-                >🔍 Zoom interactif</button>
+                    title="Afficher l’outil de capture d’image et l’épinglage de la valeur"
+                >📷 Outil capture</button>
                 <button
                     type="button"
                     class="arpm-tool-toggle"
@@ -715,7 +721,6 @@ function arp_render_shortcode($atts) {
                             <th scope="col">Foudre</th>
                             <th scope="col">Grêle</th>
                             <th scope="col">Pluie conv.</th>
-                            <th scope="col">Graupel</th>
                             <th scope="col">Pluie 1 h</th>
                             <th scope="col">Rafales</th>
                             <th scope="col">Type</th>
@@ -724,13 +729,13 @@ function arp_render_shortcode($atts) {
                     </thead>
                     <tbody data-arp-body-storms>
                         <tr>
-                            <td colspan="13" class="arp-loading">Chargement du diagnostic orageux…</td>
+                            <td colspan="12" class="arp-loading">Chargement du diagnostic orageux…</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
             <p class="arp-storm-note">
-                <strong>Lecture expert :</strong> la MUCAPE et la réflectivité maximale sont des sorties directes ARPEGE. Le risque, la foudre, la grêle et le type d’orage sont des diagnostics dérivés clairement signalés ; aucune valeur indisponible n’est inventée.
+                <strong>Lecture expert :</strong> la MUCAPE est une sortie directe ARPEGE (CAPE_INS). Le risque, la foudre, la grêle et le type d’orage sont des diagnostics dérivés du CAPE, clairement signalés ; aucune valeur indisponible n’est inventée (la réflectivité radar et le graupel ne sont pas publiés dans les paquets ARPEGE et ont été retirés).
             </p>
         </div>
 

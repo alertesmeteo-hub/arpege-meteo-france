@@ -42,7 +42,7 @@ from arpege_maps import DEFAULT_BOUNDS, ArpegeMapRenderer
 
 
 LOGGER = logging.getLogger("arpege.france")
-PIPELINE_VERSION = "1.0.0"
+PIPELINE_VERSION = "1.1.0"
 DATASET_API = (
     "https://www.data.gouv.fr/api/1/datasets/"
     "paquets-arpege-resolution-0-1deg/"
@@ -78,7 +78,6 @@ VALUE_COLUMNS = (
     "wind_direction_deg",
     "wind_gust_kmh",
     "pressure_hpa",
-    "visibility_km",
     "condition_code",
     "pressure_surface_hpa",
     "dewpoint_c",
@@ -87,8 +86,6 @@ VALUE_COLUMNS = (
     "cloud_mid_pct",
     "cloud_high_pct",
     "cape_jkg",
-    "reflectivity_dbz",
-    "graupel_mm",
     "thunder_risk_code",
     "lcl_m",
     "lightning_score",
@@ -103,6 +100,18 @@ VALUE_COLUMNS = (
     "snow_stick_risk_code",
     "snow_phase_code",
     "snowfall_total_mm",
+    # Champs ajoutés (v1.1.0) : réellement présents dans les paquets SP1/SP2
+    # d'après le descriptif technique Météo-France (TSURF, H_COULIM,
+    # COLONNE_VAPO, TMIN/TMAX(2m), FLSEN, FLLAT, FLSOLAIRE_D, FLTHERM_D).
+    "surface_temperature_c",
+    "boundary_layer_height_m",
+    "precipitable_water_mm",
+    "temperature_min_2m_c",
+    "temperature_max_2m_c",
+    "sensible_heat_mjm2",
+    "latent_heat_mjm2",
+    "solar_radiation_down_wm2",
+    "thermal_radiation_down_wm2",
 )
 
 INTEGER_COLUMNS = {
@@ -118,7 +127,6 @@ INTEGER_COLUMNS = {
     "cloud_mid_pct",
     "cloud_high_pct",
     "cape_jkg",
-    "reflectivity_dbz",
     "thunder_risk_code",
     "lcl_m",
     "lightning_score",
@@ -127,6 +135,7 @@ INTEGER_COLUMNS = {
     "snow_risk_code",
     "snow_stick_risk_code",
     "snow_phase_code",
+    "boundary_layer_height_m",
 }
 
 MAP_FIELDS = {
@@ -141,8 +150,6 @@ MAP_FIELDS = {
     "snow_mm",
     "snow_water_equivalent_mm",
     "snow_depth_cm",
-    "graupel_mm",
-    "snow_graupel_total_mm",
     "wind_speed_kmh",
     "wind_gust_kmh",
     "pressure_hpa",
@@ -152,10 +159,18 @@ MAP_FIELDS = {
     "cloud_mid_pct",
     "cloud_high_pct",
     "cape_jkg",
-    "reflectivity_dbz",
     "hail_risk_code",
     "storm_type_code",
     "altitude_m",
+    "surface_temperature_c",
+    "mixed_layer_depth_m",
+    "precipitable_water_mm",
+    "temperature_min_2m_c",
+    "temperature_max_2m_c",
+    "sensible_heat_mjm2",
+    "latent_heat_mjm2",
+    "solar_radiation_down_wm2",
+    "thermal_radiation_down_wm2",
 }
 
 CONDITION_CODES = {
@@ -223,6 +238,14 @@ class NationalCatalog:
     point_departments: list[str]
     departments: dict[str, DepartmentData]
     commune_count: int
+    # Coordonnées communales brutes (non calées sur la grille ARPEGE 0,1°),
+    # utilisées uniquement pour tracer le contour des départements : à ~10 km
+    # de résolution, un tracé basé sur les points de grille produit un rendu
+    # "vitrail" très anguleux. La densité communale (~35 000 points) donne un
+    # tracé beaucoup plus fidèle, indépendant de la résolution du modèle.
+    commune_latitudes: np.ndarray
+    commune_longitudes: np.ndarray
+    commune_departments: list[str]
 
 
 def parse_args() -> argparse.Namespace:
@@ -241,7 +264,14 @@ def parse_args() -> argparse.Namespace:
         "--forecast-hours",
         type=int,
         default=72,
-        help="Dernière échéance, entre 1 et 102 heures",
+        help=(
+            "Dernière échéance, entre 1 et 102 heures (vérifié le 2026-09-05 "
+            "contre le \"Descriptif technique des paquets de données modèle "
+            "ARPEGE\" de Météo-France, v. 02/01/2024 : la grille EURAT01 "
+            "0,1° est publiée en 9 tranches 00-12,...,97-102 et ne va pas "
+            "au-delà de +102 h, quel que soit le réseau 00/06/12/18 UTC — "
+            "il n'existe pas de tranche 102H-114H)"
+        ),
     )
     parser.add_argument(
         "--resource-directory",
@@ -413,6 +443,14 @@ def load_catalog(path: Path) -> NationalCatalog:
         len(model_indexes),
         len(departments),
     )
+    commune_latitudes = np.asarray(
+        [float(commune[5]) for commune in raw_communes], dtype=np.float64
+    )
+    commune_longitudes = np.asarray(
+        [float(commune[6]) for commune in raw_communes], dtype=np.float64
+    )
+    commune_departments = [str(commune[2]).upper() for commune in raw_communes]
+
     return NationalCatalog(
         version=f"{payload.get('catalog_version', '1')}-arpege001",
         model_indexes=model_indexes,
@@ -421,6 +459,9 @@ def load_catalog(path: Path) -> NationalCatalog:
         point_departments=point_departments,
         departments=departments,
         commune_count=len(raw_communes),
+        commune_latitudes=commune_latitudes,
+        commune_longitudes=commune_longitudes,
+        commune_departments=commune_departments,
     )
 
 
@@ -658,6 +699,15 @@ def mask_missing(values: np.ndarray, missing_value: Any) -> np.ndarray:
 
 
 def message_field(gid: int) -> str | None:
+    """Associe un message GRIB2 ARPEGE à un champ interne.
+
+    ``reflectivity_dbz`` (RFLCTVT_MAX, discipline 0/catégorie 16/numéro 193)
+    et le graupel (``tgrp``) ont été retirés le 2026-09-05 : le descriptif
+    technique Météo-France des paquets ARPEGE (SP1/SP2, EURAT01 0,1°) ne les
+    liste pas — ils étaient toujours absents des GRIB2 réels et restaient
+    silencieusement à NaN. Cf. README pour le détail des paquets.
+    """
+
     short_name = str(safe_get(gid, "shortName", ""))
     direct = {
         "2t": "temperature_k",
@@ -667,7 +717,6 @@ def message_field(gid: int) -> str | None:
         "max_10efg": "gust_u_ms",
         "max_10nfg": "gust_v_ms",
         "CAPE_INS": "cape_jkg",
-        "tgrp": "graupel_total_mm",
         "sp": "surface_pressure_pa",
         "lcc": "cloud_low_pct",
         "mcc": "cloud_mid_pct",
@@ -675,15 +724,22 @@ def message_field(gid: int) -> str | None:
         "tirf": "precipitation_total_mm",
         "tsnowp": "snow_total_mm",
         "h": "altitude_m",
+        # Ajoutés v1.1.0 : confirmés réellement présents dans SP1/SP2 par le
+        # "Descriptif technique des paquets de données modèle ARPEGE"
+        # (Météo-France, v. 02/01/2024) et par la table de shortNames locale
+        # Météo-France (centre 84/85, cf. projet MeteoFetch).
+        "TSURF": "surface_temperature_k",
+        "H_COULIM": "boundary_layer_height_m",
+        "COLONNE_VAPO": "precipitable_water_mm",
+        "TMIN": "temperature_min_2m_k",
+        "TMAX": "temperature_max_2m_k",
+        "FLSEN": "sensible_heat_total",
+        "FLLAT": "latent_heat_total",
+        "FLSOLAIRE_D": "solar_radiation_down_wm2",
+        "FLTHERM_D": "thermal_radiation_down_wm2",
     }
     if short_name in direct:
         return direct[short_name]
-    if (
-        int(safe_get(gid, "discipline", -1)) == 0
-        and int(safe_get(gid, "parameterCategory", -1)) == 16
-        and int(safe_get(gid, "parameterNumber", -1)) == 193
-    ):
-        return "reflectivity_dbz"
     return None
 
 
@@ -884,10 +940,24 @@ def transform_step(
     gust_v = array_like(raw, "gust_v_ms", shape)
     surface_pressure = array_like(raw, "surface_pressure_pa", shape) / 100.0
     cape = np.maximum(array_like(raw, "cape_jkg", shape), 0.0)
-    reflectivity = np.clip(array_like(raw, "reflectivity_dbz", shape), 0, 80)
     cloud_low = np.clip(array_like(raw, "cloud_low_pct", shape), 0, 100)
     cloud_mid = np.clip(array_like(raw, "cloud_mid_pct", shape), 0, 100)
     cloud_high = np.clip(array_like(raw, "cloud_high_pct", shape), 0, 100)
+    surface_temperature = array_like(raw, "surface_temperature_k", shape) - 273.15
+    boundary_layer_height = np.maximum(
+        array_like(raw, "boundary_layer_height_m", shape), 0.0
+    )
+    precipitable_water = np.maximum(
+        array_like(raw, "precipitable_water_mm", shape), 0.0
+    )
+    temperature_min_2m = array_like(raw, "temperature_min_2m_k", shape) - 273.15
+    temperature_max_2m = array_like(raw, "temperature_max_2m_k", shape) - 273.15
+    solar_radiation_down = np.maximum(
+        array_like(raw, "solar_radiation_down_wm2", shape), 0.0
+    )
+    thermal_radiation_down = np.maximum(
+        array_like(raw, "thermal_radiation_down_wm2", shape), 0.0
+    )
 
     precipitation, rain_total = accumulation(
         raw,
@@ -899,8 +969,14 @@ def transform_step(
     snow, snow_total = accumulation(
         raw, "snow_total_mm", shape, previous.get("snow_total"), lead_hour
     )
-    graupel, graupel_total = accumulation(
-        raw, "graupel_total_mm", shape, previous.get("graupel_total"), lead_hour
+    # FLSEN/FLLAT sont des flux cumulés (J/m²) depuis le début du run, comme
+    # les précipitations : on réutilise le même schéma d'accumulation puis on
+    # convertit en MJ/m² pour l'affichage cartographique.
+    _sensible_step, sensible_total = accumulation(
+        raw, "sensible_heat_total", shape, previous.get("sensible_total"), lead_hour
+    )
+    _latent_step, latent_total = accumulation(
+        raw, "latent_heat_total", shape, previous.get("latent_total"), lead_hour
     )
 
     wind_speed = np.hypot(u_wind, v_wind) * 3.6
@@ -976,40 +1052,31 @@ def transform_step(
     condition[np.isfinite(precipitation) & (precipitation >= 5)] = 6
     condition[np.isfinite(snow) & (snow >= 0.1)] = 7
 
+    # La réflectivité radar (RFLCTVT_MAX) n'existe pas dans les paquets ARPEGE
+    # SP1/SP2 réellement publiés (retirée le 2026-09-05, cf. message_field) :
+    # ces indices orage/grêle reposent désormais uniquement sur le CAPE
+    # instantané (CAPE_INS, réel) et les rafales, avec des seuils relevés en
+    # conséquence. Ils restent des estimations, un peu moins discriminantes
+    # qu'avec la réflectivité, mais n'affichent plus de donnée fantôme.
     thunder = np.zeros(shape, dtype=np.int16)
-    thunder[(cape >= 100) | (reflectivity >= 30)] = 1
-    thunder[(cape >= 500) | (reflectivity >= 40)] = 2
-    thunder[(cape >= 1200) | (reflectivity >= 50)] = 3
-    thunder[(cape >= 2200) & (reflectivity >= 52)] = 4
-    thunder[(reflectivity >= 58) | ((cape >= 1800) & (gust_speed >= 90))] = 4
-    thunder[~np.isfinite(cape) & ~np.isfinite(reflectivity)] = 0
+    thunder[cape >= 300] = 1
+    thunder[cape >= 800] = 2
+    thunder[cape >= 1500] = 3
+    thunder[(cape >= 2200) | ((cape >= 1200) & (gust_speed >= 90))] = 4
+    thunder[~np.isfinite(cape)] = 0
 
-    lightning = np.clip(
-        np.nan_to_num(cape, nan=0.0) / 30.0
-        + np.maximum(np.nan_to_num(reflectivity, nan=0.0) - 25.0, 0) * 1.8,
-        0,
-        100,
-    )
+    lightning = np.clip(np.nan_to_num(cape, nan=0.0) / 25.0, 0, 100)
     hail = np.zeros(shape, dtype=np.int16)
-    hail[(cape >= 500) & (reflectivity >= 42)] = 1
-    hail[(cape >= 1200) & (reflectivity >= 50)] = 2
-    hail[((cape >= 2200) & (reflectivity >= 55)) | (graupel >= 2)] = 3
-    convective_fraction = np.clip(
-        np.nan_to_num(cape, nan=0.0) / 1200.0, 0, 1
-    ) * np.clip(
-        (np.nan_to_num(reflectivity, nan=0.0) - 20.0) / 25.0, 0, 1
-    )
+    hail[cape >= 800] = 1
+    hail[cape >= 1500] = 2
+    hail[(cape >= 2500) & (gust_speed >= 80)] = 3
+    convective_fraction = np.clip(np.nan_to_num(cape, nan=0.0) / 1500.0, 0, 1)
     convective_precipitation = precipitation * convective_fraction
     storm_type = np.zeros(shape, dtype=np.int16)
     storm_type[thunder == 1] = 1
     storm_type[thunder == 2] = 2
-    storm_type[(thunder >= 3) & (reflectivity >= 50)] = 3
+    storm_type[(thunder >= 3) & (gust_speed >= 60)] = 3
     storm_type[(thunder >= 4) & (cape >= 2000)] = 4
-
-    snow_graupel_total = np.nan_to_num(snow_total, nan=0.0) + np.nan_to_num(
-        graupel_total, nan=0.0
-    )
-    snow_graupel_total[~np.isfinite(snow_total) & ~np.isfinite(graupel_total)] = np.nan
 
     snow_ratio = np.select(
         [temperature <= -10, temperature <= -5, temperature <= 0, temperature <= 1.5],
@@ -1059,11 +1126,8 @@ def transform_step(
         "pressure_hpa": rounded(pressure, 0),
         "pressure_surface_hpa": rounded(surface_pressure, 0),
         "surface_pressure_hpa": rounded(surface_pressure, 0),
-        "visibility_km": np.full(shape, np.nan),
         "condition_code": condition,
         "cape_jkg": rounded(cape, 0),
-        "reflectivity_dbz": rounded(reflectivity, 0),
-        "graupel_mm": rounded(graupel, 2),
         "thunder_risk_code": thunder,
         "lcl_m": rounded(lcl, 0),
         "lightning_score": rounded(lightning, 0),
@@ -1079,15 +1143,25 @@ def transform_step(
         "snow_stick_risk_code": snow_stick,
         "snow_phase_code": snow_phase,
         "snowfall_total_mm": rounded(snow_total, 1),
-        "graupel_total_mm": rounded(graupel_total, 1),
-        "snow_graupel_total_mm": rounded(snow_graupel_total, 1),
         "altitude_m": rounded(altitude, 0),
+        # Champs réels ajoutés v1.1.0 (SP1/SP2, cf. message_field) :
+        "surface_temperature_c": rounded(surface_temperature, 1),
+        "boundary_layer_height_m": rounded(boundary_layer_height, 0),
+        "mixed_layer_depth_m": rounded(boundary_layer_height, 0),
+        "precipitable_water_mm": rounded(precipitable_water, 1),
+        "temperature_min_2m_c": rounded(temperature_min_2m, 1),
+        "temperature_max_2m_c": rounded(temperature_max_2m, 1),
+        "sensible_heat_mjm2": rounded(sensible_total / 1.0e6, 2),
+        "latent_heat_mjm2": rounded(latent_total / 1.0e6, 2),
+        "solar_radiation_down_wm2": rounded(solar_radiation_down, 0),
+        "thermal_radiation_down_wm2": rounded(thermal_radiation_down, 0),
     }
     state = {
         "rain_total": rain_total,
         "snow_total": snow_total,
-        "graupel_total": graupel_total,
         "fresh_snow": snow_depth,
+        "sensible_total": sensible_total,
+        "latent_total": latent_total,
     }
     return result, state
 
@@ -1250,9 +1324,9 @@ def build_product(
         result_directory / "maps",
         width=MAP_WIDTH,
         height=MAP_HEIGHT,
-        france_latitudes=catalog.point_latitudes,
-        france_longitudes=catalog.point_longitudes,
-        france_departments=catalog.point_departments,
+        france_latitudes=catalog.commune_latitudes,
+        france_longitudes=catalog.commune_longitudes,
+        france_departments=catalog.commune_departments,
         boundary_directory=(
             Path(__file__).resolve().parents[1] / "config" / "natural-earth"
         ),
@@ -1409,20 +1483,35 @@ def build_product(
         "diagnostics": {
             "direct": [
                 "MUCAPE",
-                "réflectivité maximale",
                 "pluie cumulée",
                 "neige cumulée",
-                "graupel cumulé",
                 "pression de surface",
                 "nuages bas/moyens/élevés",
+                "température de surface",
+                "hauteur de couche limite",
+                "eau précipitable",
+                "Tmin/Tmax 2 m",
+                "flux de chaleur sensible/latente cumulés",
+                "rayonnement solaire/thermique descendant",
             ],
             "derived": [
                 "pression ramenée au niveau de la mer",
                 "point de rosée",
                 "LCL",
-                "risque orage",
-                "risque grêle",
+                "risque orage (CAPE)",
+                "risque grêle (CAPE)",
                 "phase et tenue de la neige",
+            ],
+            "unavailable": [
+                "réflectivité radar (absente des paquets SP1/SP2)",
+                "graupel (absent des paquets SP1/SP2)",
+                "visibilité 2 m (absente des paquets SP1/SP2 ; seule la "
+                "visibilité isobare IP2 existe, non intégrée)",
+                "densité de foudre (non produite par le PNT ARPEGE)",
+                "CIN, SBCAPE distinct, vent/température/humidité en "
+                "altitude, géopotentiel, ISO 0/-10/-20°C, vitesse "
+                "verticale, tourbillon/vorticité/divergence (nécessitent "
+                "les paquets IP1-4/HP1-2, non téléchargés par ce pipeline)",
             ],
         },
         "search": {

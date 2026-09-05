@@ -24,7 +24,7 @@ from scipy.spatial import cKDTree
 
 
 MAP_SCHEMA_VERSION = 6
-MODULE_VERSION = "1.0.0"
+MODULE_VERSION = "1.1.0"
 # Une valeur numérique tous les deux pixels cartographiques : le survol reste
 # précis à l'échelle d'une commune sans multiplier déraisonnablement le poids
 # de la branche de données.
@@ -180,6 +180,34 @@ LAYER_SPECS = (
             (35, "#d93435"),
             (40, "#a71f57"),
             (45, "#5b1037"),
+        ),
+        group="Températures",
+        decimals=1,
+    ),
+    LayerSpec(
+        "temperature_min_2m",
+        "Tmin 2 m (depuis le dernier groupe d'échéances)",
+        "°C",
+        "temperature_min_2m_c",
+        (
+            (-25, "#482173"), (-15, "#303fa5"), (-5, "#3478c5"),
+            (0, "#55b7dd"), (5, "#53c6a8"), (10, "#70cf66"),
+            (15, "#cbd83f"), (20, "#f2d43d"), (25, "#f2a331"),
+            (30, "#ea652b"), (35, "#d93435"),
+        ),
+        group="Températures",
+        decimals=1,
+    ),
+    LayerSpec(
+        "temperature_max_2m",
+        "Tmax 2 m (depuis le dernier groupe d'échéances)",
+        "°C",
+        "temperature_max_2m_c",
+        (
+            (-25, "#482173"), (-15, "#303fa5"), (-5, "#3478c5"),
+            (0, "#55b7dd"), (5, "#53c6a8"), (10, "#70cf66"),
+            (15, "#cbd83f"), (20, "#f2d43d"), (25, "#f2a331"),
+            (30, "#ea652b"), (35, "#d93435"), (40, "#a71f57"),
         ),
         group="Températures",
         decimals=1,
@@ -368,27 +396,22 @@ LAYER_SPECS = (
         transparent_below=0.03,
         discrete=True,
     ),
+    # "graupel" et "neige_graupel" retirés le 2026-09-05 : le champ GRIB tgrp
+    # n'existe pas dans les paquets SP1/SP2 ARPEGE réels (cf. message_field
+    # dans update_arpege_france.py) ; ces deux couches restaient toujours
+    # vides (NaN silencieux).
     LayerSpec(
-        "graupel",
-        "Graupel",
+        "eau_precipitable",
+        "Eau précipitable (colonne de vapeur d'eau)",
         "mm",
-        "graupel_mm",
-        tuple(stop for stop in PRECIPITATION_STOPS if stop[0] <= 100),
+        "precipitable_water_mm",
+        (
+            (0, "#f4f7fb"), (5, "#d7efff"), (10, "#a9d9ff"),
+            (15, "#70b8ef"), (20, "#5c9be0"), (30, "#536bc1"),
+            (40, "#7048ac"), (50, "#963b92"), (65, "#c65382"),
+        ),
         group="Précipitations",
         decimals=1,
-        transparent_below=0.03,
-        discrete=True,
-    ),
-    LayerSpec(
-        "neige_graupel",
-        "Accumulation de neige et graupel",
-        "mm",
-        "snow_graupel_total_mm",
-        tuple(stop for stop in PRECIPITATION_STOPS if stop[0] <= 200),
-        group="Précipitations",
-        decimals=1,
-        transparent_below=0.03,
-        discrete=True,
     ),
     LayerSpec(
         "grele",
@@ -785,20 +808,32 @@ LAYER_SPECS = (
         group="Instabilité",
         transparent_below=25.0,
     ),
+    # "reflectivite" retirée le 2026-09-05 : RFLCTVT_MAX n'existe pas dans
+    # les paquets SP1/SP2 ARPEGE réels (absent du descriptif technique
+    # Météo-France), la couche restait toujours vide.
     LayerSpec(
-        "reflectivite",
-        "Réflectivité radar maximale",
-        "dBZ",
-        "reflectivity_dbz",
+        "rayonnement_solaire_descendant",
+        "Rayonnement solaire descendant",
+        "W/m²",
+        "solar_radiation_down_wm2",
         (
-            (0, "#f5f5f7"), (5, "#c9e6ff"), (10, "#7fbbff"),
-            (15, "#25cbe0"), (20, "#00bd75"), (25, "#5be000"),
-            (30, "#d5eb00"), (35, "#ffe500"), (40, "#ffae00"),
-            (45, "#ff6500"), (50, "#f32020"), (55, "#d00076"),
-            (60, "#9300c6"), (70, "#ffffff"),
+            (0, "#24346f"), (50, "#346aa5"), (150, "#3da6b3"),
+            (300, "#72c776"), (500, "#d4d74c"), (700, "#f3b53d"),
+            (900, "#e36b35"), (1100, "#a52f49"),
         ),
-        group="Instabilité",
-        transparent_below=5.0,
+        group="Autres",
+    ),
+    LayerSpec(
+        "rayonnement_thermique_descendant",
+        "Rayonnement thermique descendant",
+        "W/m²",
+        "thermal_radiation_down_wm2",
+        (
+            (150, "#341c64"), (200, "#3b57aa"), (250, "#3ca0bd"),
+            (300, "#7bca7d"), (350, "#e2d34c"), (400, "#e47b38"),
+            (450, "#b63148"),
+        ),
+        group="Autres",
     ),
     LayerSpec(
         "altitude",
@@ -1175,8 +1210,9 @@ class ArpegeMapRenderer:
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.width} '
             f'{self.height}" preserveAspectRatio="none" '
             'shape-rendering="geometricPrecision">\n'
-            f'<path d="{department_path}" fill="none" stroke="#20242b" '
-            'stroke-opacity="0.58" stroke-width="0.8" '
+            f'<path d="{department_path}" fill="none" stroke="#6b7078" '
+            'stroke-opacity="0.38" stroke-width="0.45" stroke-linejoin="round" '
+            'stroke-linecap="round" '
             'vector-effect="non-scaling-stroke"/>\n'
             f'<path d="{national_path}" fill="none" stroke="#111116" '
             'stroke-width="1.45" stroke-linejoin="round" stroke-linecap="round" '

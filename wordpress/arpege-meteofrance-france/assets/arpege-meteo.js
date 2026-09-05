@@ -1271,7 +1271,6 @@
                 appendNumber(stormRow, 'Foudre', lightning, 0, '/100', finite(lightning) && lightning >= 60 ? 'arp-lightning-high' : '');
                 appendHazard(stormRow, 'Grêle', value(values, 'hail_risk_code'));
                 appendNumber(stormRow, 'Pluie conv.', value(values, 'convective_precipitation_mm'), 1, ' mm');
-                appendNumber(stormRow, 'Graupel', value(values, 'graupel_mm'), 2, ' mm');
                 appendNumber(stormRow, 'Pluie 1 h', rain, 1, ' mm', rainClass(rain));
                 appendNumber(stormRow, 'Rafales', gustDisplay, 0, ' km/h', gustClass(gustDisplay));
                 var stormTypeCode = value(values, 'storm_type_code');
@@ -1297,7 +1296,8 @@
                     ['Pluie cumulée depuis le run', value(values, 'precipitation_total_mm'), 1, ' mm'],
                     ['Nuages bas', value(values, 'cloud_low_pct'), 0, ' %'],
                     ['Nuages moyens', value(values, 'cloud_mid_pct'), 0, ' %'],
-                    ['Nuages élevés', value(values, 'cloud_high_pct'), 0, ' %']
+                    ['Nuages élevés', value(values, 'cloud_high_pct'), 0, ' %'],
+                    ['Eau précipitable', value(values, 'precipitable_water_mm'), 1, ' mm']
                 ].forEach(function (item) {
                     var box = document.createElement('div');
                     box.className = 'arp-advanced-item';
@@ -1422,7 +1422,7 @@
                     ['Point de rosée', value(values, 'dewpoint_c'), 1, ' °C'],
                     ['Neige cumulée depuis le run', value(values, 'snowfall_total_mm'), 1, ' mm'],
                     ['Précipitations cumulées', value(values, 'precipitation_total_mm'), 1, ' mm'],
-                    ['Réflectivité maximale', value(values, 'reflectivity_dbz'), 0, ' dBZ'],
+                    ['Température de surface', value(values, 'surface_temperature_c'), 1, ' °C'],
                     ['Pression au sol', value(values, 'pressure_surface_hpa'), 0, ' hPa'],
                     ['Pression mer estimée', value(values, 'pressure_hpa'), 0, ' hPa']
                 ]);

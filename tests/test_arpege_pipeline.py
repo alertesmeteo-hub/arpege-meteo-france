@@ -119,7 +119,6 @@ class ArpegePipelineTests(unittest.TestCase):
             "gust_v_ms": np.asarray([8.0, 6.0]),
             "surface_pressure_pa": np.asarray([101300.0, 95000.0]),
             "cape_jkg": np.asarray([0.0, 1500.0]),
-            "reflectivity_dbz": np.asarray([0.0, 52.0]),
             "cloud_low_pct": np.asarray([10.0, 70.0]),
             "cloud_mid_pct": np.asarray([20.0, 50.0]),
             "cloud_high_pct": np.asarray([30.0, 20.0]),
@@ -129,7 +128,6 @@ class ArpegePipelineTests(unittest.TestCase):
             {
                 "precipitation_total_mm": np.asarray([0.0, 1.0]),
                 "snow_total_mm": np.asarray([0.0, 0.2]),
-                "graupel_total_mm": np.asarray([0.0, 0.1]),
             }
         )
         transformed, state = transform_step(first, altitude, {}, 1)
@@ -138,7 +136,6 @@ class ArpegePipelineTests(unittest.TestCase):
             {
                 "precipitation_total_mm": np.asarray([0.5, 3.5]),
                 "snow_total_mm": np.asarray([0.0, 0.7]),
-                "graupel_total_mm": np.asarray([0.0, 0.3]),
             }
         )
         transformed2, _state2 = transform_step(second, altitude, state, 2)

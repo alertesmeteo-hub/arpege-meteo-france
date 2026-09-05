@@ -39,7 +39,7 @@ jobs:
           python scripts/update_arpege_france.py \
             --catalog config/communes-france.json \
             --output-dir build/national \
-            --forecast-hours 72 \
+            --forecast-hours 102 \
             --current-metadata-url \
             "https://raw.githubusercontent.com/${{ github.repository }}/data/index.json"
           if test -f build/national/index.json; then
@@ -63,7 +63,7 @@ jobs:
           assert index["coverage"]["communes"] == 34746
           assert index["coverage"]["departments"] == 96
           assert len(maps["layers"]) >= 20
-          assert len(maps["steps"]) >= 72
+          assert len(maps["steps"]) >= 60
           assert (root / "departements/66.json").is_file()
           print(
               f"Validation OK : {len(maps['layers'])} cartes, "

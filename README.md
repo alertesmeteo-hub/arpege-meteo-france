@@ -87,19 +87,21 @@ data/
 
 Les données proviennent directement des [paquets ARPEGE 0,1° de Météo-France](https://www.data.gouv.fr/datasets/paquets-arpege-resolution-0-1deg), publiés sous Licence Ouverte 2.0. Les communes proviennent de l'API officielle de découpage administratif française.
 
-Site : [www.alertes-meteo.com](https://www.alertes-meteo.com/) — module v1.0.0.
+Site : [www.alertes-meteo.com](https://www.alertes-meteo.com/) — module v1.1.0.
 
 ## Cartes disponibles
 
-26 cartes réparties par catégorie (Températures, Précipitations, Vent, Nuages et humidité, Pression, Instabilité, Relief). Le menu de sélection distingue les paramètres essentiels (toujours visibles) des paramètres secondaires, repliés derrière un bouton « Voir plus de paramètres ».
+Cartes réparties par catégorie (Températures, Précipitations, Vent, Nuages et humidité, Pression, Instabilité, Relief, Autres). Le menu de sélection distingue les paramètres essentiels (toujours visibles) des paramètres secondaires, repliés derrière un bouton « Voir plus de paramètres ».
 
-Cartes en attente du paquet ARPEGE **IP1** (niveaux de pression), non téléchargé aujourd'hui — seuls les paquets de surface SP1/SP2/HP1 sont utilisés : températures et vent à 850/500/300 hPa, géopotentiel, humidité en altitude, ainsi que les indices d'instabilité composites (SBCAPE, MLCAPE, CIN, K-Index, Total Totals, Theta-E Lapse Rate, Bulk Shear, hélicité SRH, paramètres supercellule/tornade/grêle significative), vitesse verticale, vorticité et divergence. Leur configuration d'affichage (libellés, couleurs, groupes) existe déjà dans `scripts/arpege_maps.py` — il ne manque que les données sources.
+Depuis la v1.1.0, seuls les champs réellement présents dans les paquets **SP1/SP2** (surface) sont exposés : réflectivité radar et graupel ont été retirés (absents du descriptif technique Météo-France des paquets ARPEGE, ils restaient toujours à NaN) ; à l'inverse, plusieurs champs SP1/SP2 réels mais jusqu'ici non exploités ont été ajoutés (Tmin/Tmax 2 m, température de surface, hauteur de couche limite, eau précipitable, flux de chaleur sensible/latente, rayonnement solaire/thermique descendant).
+
+Cartes toujours en attente des paquets ARPEGE **IP1-4/HP1-2** (niveaux de pression et de hauteur), non téléchargés à ce jour car chacun pèse plusieurs centaines de Mo par tranche horaire (jusqu'à ~740 Mo pour HP1) : températures et vent à 850/500/300 hPa, géopotentiel, humidité en altitude, ISO 0/-10/-20 °C, vitesse verticale, tourbillon/vorticité/divergence, CIN et vent à 100 m. Leur configuration d'affichage (libellés, couleurs, groupes) existe déjà dans `scripts/arpege_maps.py` — il ne manque que le téléchargement/décodage des paquets, non couvert par ce pipeline. La densité de foudre n'est publiée par aucun paquet ARPEGE (ce n'est pas une sortie du modèle de prévision numérique).
 
 ## Outils de la carte
 
 La barre d'outils de la carte propose deux modes, à côté du sélecteur de paramètre et de la navigation dans les échéances :
 
-- **Zoom interactif** : affiche des outils supplémentaires — capture PNG de la vue affichée et épinglage de la valeur au clic (en plus du survol).
+- **Outil capture** : affiche des outils supplémentaires — capture PNG de la vue affichée et épinglage de la valeur au clic (en plus du survol).
 - **Diagramme** : un clic sur la carte affiche un mini-diagramme (température et précipitations horaires) pour la commune la plus proche du point cliqué, à partir des mêmes données que l'onglet « Prévisions générales ».
 
 Radiosondage et coupes verticales ne sont pas encore disponibles : ces vues nécessitent les niveaux de pression ARPEGE (paquet **IP1**), que le pipeline ne télécharge pas encore — seuls SP1/SP2/HP1 (champs de surface) sont utilisés aujourd'hui.
