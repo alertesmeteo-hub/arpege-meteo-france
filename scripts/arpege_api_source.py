@@ -76,6 +76,20 @@ REQUEST_LONGITUDE_RANGE = (-13.0, 19.0)
 MAX_WORKERS = 4
 REQUEST_PAUSE_SECONDS = 0.0
 
+# Nombre maximal de champs REQUIS testés lors de la sonde rapide avant de
+# lancer la matrice complète champs×échéances. Corrige un incident de
+# production (runs GitHub Actions du 2026-09-05, cf. rapport) : sans cette
+# sonde, un problème global de l'API (ex. un mauvais format d'axe WCS
+# `height`, ou une clé invalide déclenchant un 429 systématique) n'était
+# détecté qu'APRÈS avoir tenté les ~2200 requêtes champs×échéances, ce qui
+# gaspillait du temps ET accumulait en mémoire (dict ``payload``) les octets
+# GRIB2 de tous les champs non requis ayant réussi entre-temps, avant que
+# l'exception ne soit levée et que tout soit jeté — un pic mémoire qui,
+# combiné au décodage GRIB2 du fallback data.gouv.fr qui suit immédiatement,
+# a provoqué un OOM kill du runner (remonté par GitHub Actions comme
+# "The operation was canceled.", sans message applicatif).
+PROBE_LEAD_HOUR = 0
+
 
 class ArpegeApiSourceError(RuntimeError):
     """La source API Météo-France n'a pas pu produire un run exploitable."""
@@ -316,6 +330,46 @@ def fetch_arpege_api_run(
     if not lead_hours:
         raise ArpegeApiSourceError(
             "Aucune échéance ARPEGE API commune avec la cadence attendue"
+        )
+
+    # --- Sonde rapide : valider que l'API répond correctement AVANT de
+    # lancer la matrice complète (champs × échéances, potentiellement
+    # plusieurs milliers de requêtes). On ne teste que les champs requis, sur
+    # une seule échéance (+00 h) : si l'un d'eux échoue (429 persistant,
+    # clé invalide, incompatibilité d'axe WCS type "InvalidAxisLabel"...),
+    # on abandonne immédiatement sans avoir accumulé aucun octet GRIB2 des
+    # autres champs — c'est précisément ce qui manquait lors de l'incident
+    # du 2026-09-05 (cf. commentaire sur PROBE_LEAD_HOUR).
+    probe_hour = PROBE_LEAD_HOUR if PROBE_LEAD_HOUR in lead_hours else lead_hours[0]
+    required_fields = {
+        field_name: resolved_field
+        for field_name, resolved_field in resolved.items()
+        if resolved_field.request.required
+    }
+    LOGGER.info(
+        "Sonde ARPEGE API : validation de %s champ(s) requis à +%02d h avant "
+        "la matrice complète",
+        len(required_fields),
+        probe_hour,
+    )
+    probe_errors: list[str] = []
+    for field_name, resolved_field in required_fields.items():
+        try:
+            client.get_coverage(
+                resolved_field.coverage_id,
+                time_s=probe_hour * 3600,
+                latitude_range=(min_lat, max_lat),
+                longitude_range=(min_lon, max_lon),
+                pressure_hpa=resolved_field.request.pressure_hpa,
+                height_m=resolved_field.request.height_m,
+            )
+        except MeteoFranceWCSError as error:
+            probe_errors.append(f"{field_name}: {error}")
+    if probe_errors:
+        raise ArpegeApiSourceError(
+            "Sonde ARPEGE API échouée pour un ou plusieurs champs requis "
+            "(abandon avant la matrice complète pour éviter de gaspiller du "
+            f"temps/de la mémoire) : {'; '.join(probe_errors)}"
         )
 
     payload: dict[int, dict[str, bytes]] = {hour: {} for hour in lead_hours}

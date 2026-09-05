@@ -114,8 +114,8 @@ class MeteoFranceWCSClient:
         base_url: str = DEFAULT_BASE_URL,
         session: requests.Session | None = None,
         timeout: tuple[float, float] = (15.0, 120.0),
-        max_retries: int = 4,
-        retry_delay_seconds: float = 5.0,
+        max_retries: int = 2,
+        retry_delay_seconds: float = 3.0,
         user_agent: str = "alertes-meteo.com/arpege-meteofrance-france/1.2",
     ) -> None:
         if not api_key:
