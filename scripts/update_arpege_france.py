@@ -60,16 +60,25 @@ except ImportError:  # pragma: no cover - modules toujours livrés ensemble
 
 
 LOGGER = logging.getLogger("arpege.france")
-PIPELINE_VERSION = "1.3.0"
+PIPELINE_VERSION = "1.3.1"
 GRAVITY_MS2 = 9.80665
 # Niveaux isobares réellement présents dans le paquet IP1 (100 à 1000 hPa,
 # vérifié le 08/09/2026 sur un fichier réel) : on ne retient que ceux utiles
 # à l'onglet Tempête / haute altitude du comparateur (850-500 hPa) plus
 # 1000 hPa, nécessaire au calcul de l'épaisseur 1000-500.
 ISOBARIC_LEVELS_HPA = (1000, 850, 800, 700, 600, 500)
+# v1.3.1 : IP1 publie aussi le vent (u/v) à ces mêmes niveaux, dans le même
+# fichier déjà téléchargé — aucun coût réseau supplémentaire. Sert au vent
+# d'altitude du mode Tempête et au cisaillement 0-500 hPa (proxy standard du
+# cisaillement profond 0-6 km, cf. buildStormTable côté comparateur).
 ISOBARIC_POINT_ONLY_FIELDS = frozenset(
     f"{prefix}_{level}_{suffix}"
-    for prefix, suffix in (("temperature", "k"), ("geopotential", "gpm"))
+    for prefix, suffix in (
+        ("temperature", "k"),
+        ("geopotential", "gpm"),
+        ("wind_u", "ms"),
+        ("wind_v", "ms"),
+    )
     for level in ISOBARIC_LEVELS_HPA
 )
 DATASET_API = (
@@ -189,6 +198,11 @@ VALUE_COLUMNS = (
     "geopotential_600_m",
     "thickness_1000_500_dam",
     "freezing_level_m",
+    # v1.3.1 : vent isobare (même paquet IP1, cf. plus haut).
+    "wind_speed_800_kmh",
+    "wind_speed_700_kmh",
+    "wind_speed_600_kmh",
+    "shear_0_6_ms",
 )
 
 INTEGER_COLUMNS = {
@@ -227,6 +241,9 @@ INTEGER_COLUMNS = {
     "geopotential_600_m",
     "thickness_1000_500_dam",
     "freezing_level_m",
+    "wind_speed_800_kmh",
+    "wind_speed_700_kmh",
+    "wind_speed_600_kmh",
 }
 
 MAP_FIELDS = {
@@ -855,12 +872,14 @@ def message_field(gid: int) -> str | None:
     """
 
     short_name = str(safe_get(gid, "shortName", ""))
-    if short_name in ("t", "z") and str(safe_get(gid, "typeOfLevel", "")) == "isobaricInhPa":
+    if short_name in ("t", "z", "u", "v") and str(safe_get(gid, "typeOfLevel", "")) == "isobaricInhPa":
         level = int(safe_get(gid, "level", -1))
         if level in ISOBARIC_LEVELS_HPA:
-            return (
-                f"temperature_{level}_k" if short_name == "t" else f"geopotential_{level}_gpm"
-            )
+            if short_name == "t":
+                return f"temperature_{level}_k"
+            if short_name == "z":
+                return f"geopotential_{level}_gpm"
+            return f"wind_{short_name}_{level}_ms"
         return None
     direct = {
         "2t": "temperature_k",
@@ -1311,6 +1330,24 @@ def transform_step(
     geopotential_700 = array_like(raw, "geopotential_700_gpm", shape)
     geopotential_600 = array_like(raw, "geopotential_600_gpm", shape)
     geopotential_1000 = array_like(raw, "geopotential_1000_gpm", shape)
+    wind_speed_800 = np.hypot(
+        array_like(raw, "wind_u_800_ms", shape), array_like(raw, "wind_v_800_ms", shape)
+    ) * 3.6
+    wind_speed_700 = np.hypot(
+        array_like(raw, "wind_u_700_ms", shape), array_like(raw, "wind_v_700_ms", shape)
+    ) * 3.6
+    wind_speed_600 = np.hypot(
+        array_like(raw, "wind_u_600_ms", shape), array_like(raw, "wind_v_600_ms", shape)
+    ) * 3.6
+    # Cisaillement profond (proxy 0-500 hPa, m/s) : différence vectorielle
+    # entre le vent 10 m et le vent 500 hPa. Standard en prévision convective
+    # comme approximation du cisaillement 0-6 km lorsque le vent réel à 6 km
+    # n'est pas disponible (500 hPa ≈ 5,5-6 km selon l'épaisseur de la
+    # colonne). Cf. shear_0_6_ms côté HARMONIE pour l'équivalent direct.
+    shear_0_6 = np.hypot(
+        array_like(raw, "wind_u_500_ms", shape) - u_wind,
+        array_like(raw, "wind_v_500_ms", shape) - v_wind,
+    )
 
     # Épaisseur 1000-500 hPa (dam) : proportionnelle à la température moyenne
     # de la couche, utilisée pour distinguer pluie/neige en altitude.
@@ -1581,6 +1618,10 @@ def transform_step(
         "geopotential_600_m": rounded(geopotential_600, 0),
         "thickness_1000_500_dam": rounded(thickness_1000_500, 0),
         "freezing_level_m": rounded(freezing_level, 0),
+        "wind_speed_800_kmh": rounded(wind_speed_800, 0),
+        "wind_speed_700_kmh": rounded(wind_speed_700, 0),
+        "wind_speed_600_kmh": rounded(wind_speed_600, 0),
+        "shear_0_6_ms": rounded(shear_0_6, 1),
     }
     state = {
         "rain_total": rain_total,
