@@ -72,7 +72,7 @@ python scripts/update_arpege_france.py \
   --forecast-hours 72
 ```
 
-Le traitement télécharge successivement les paquets SP1 et SP2, ainsi que HP1 à +0 h pour l'altitude. Il ne conserve pas tous les GRIB simultanément afin de limiter l'espace disque du runner. Voir « Tester la source API avec votre clé » plus haut pour l'équivalent avec l'API officielle.
+Le traitement télécharge successivement les paquets SP1 et SP2, ainsi que HP1 à +0 h pour l'altitude et, depuis la v1.3.0, IP1 (niveaux de pression 850-500 hPa, best-effort : absence temporaire sans impact sur le reste du run). Il ne conserve pas tous les GRIB simultanément afin de limiter l'espace disque du runner. Voir « Tester la source API avec votre clé » plus haut pour l'équivalent avec l'API officielle.
 
 ## Installation du module WordPress/Avada
 
@@ -129,9 +129,11 @@ Cartes réparties par catégorie (Températures, Précipitations, Vent, Nuages e
 
 Le socle de champs surface/2 m (SP1/SP2 côté data.gouv.fr) reste inchangé depuis la v1.1.0 : réflectivité radar et graupel restent absents (jamais publiés par ARPEGE), Tmin/Tmax 2 m, température de surface, hauteur de couche limite, eau précipitable, flux de chaleur sensible/latente et rayonnement solaire/thermique descendant restent disponibles quelle que soit la source.
 
-**Nouveau en v1.2.0, uniquement avec l'API officielle Météo-France** (`METEOFRANCE_API_KEY` configurée) : températures et vent à 850/500/300 hPa, humidité à 850/500 hPa, géopotentiel à 850/500 hPa, vitesse verticale à 500 hPa, CIN et vent à 100 m. Ces couches restent vides (non publiées) tant qu'un run n'a pas été produit via l'API — voir « Tester la source API avec votre clé » pour valider la correspondance exacte des indicateurs Météo-France, jamais vérifiée en conditions réelles dans cet environnement de développement.
+**Nouveau en v1.2.0, uniquement avec l'API officielle Météo-France** (`METEOFRANCE_API_KEY` configurée) : vent et humidité à 850/500 hPa, températures et vent à 300 hPa, vitesse verticale à 500 hPa, CIN et vent à 100 m. Ces couches restent vides (non publiées) tant qu'un run n'a pas été produit via l'API.
 
-Restent non disponibles quelle que soit la source, car elles nécessitent un profil vertical complet ou ne sont pas produites par ARPEGE : ISO 0/-10/-20 °C, tourbillon/vorticité/divergence, densité de foudre, visibilité 2 m.
+**Nouveau en v1.3.0, disponible gratuitement sans clé API** : températures et géopotentiel à 800/700/600 hPa, épaisseur 1000-500 hPa et iso 0 °C (interpolée à partir du profil vertical 1000-500 hPa). Ces champs — ainsi que température/géopotentiel 850/500 hPa, auparavant réservés à l'API — sont désormais extraits directement du paquet gratuit **IP1** de data.gouv.fr (température `t` et géopotentiel `z`, niveaux isobares 100-1000 hPa, vérifiés le 08/09/2026 par comparaison avec les prévisions ARPEGE haute altitude publiées par un service tiers indépendant). Téléchargement IP1 opportuniste : si le paquet est temporairement incomplet sur data.gouv.fr, ces champs restent simplement absents pour ce run (le reste de la publication n'est pas affecté). Pas de nouvelle couche cartographique pour ces champs — ils alimentent uniquement les tableaux par commune (mode Tempête / haute altitude du comparateur de modèles).
+
+Restent non disponibles quelle que soit la source, car elles nécessitent un profil vertical plus complet ou ne sont pas produites par ARPEGE : -10/-20 °C, tourbillon/vorticité/divergence, densité de foudre, visibilité 2 m.
 
 ## Outils de la carte
 
@@ -140,4 +142,4 @@ La barre d'outils de la carte propose deux modes, à côté du sélecteur de par
 - **Outil capture** : affiche des outils supplémentaires — capture PNG de la vue affichée et épinglage de la valeur au clic (en plus du survol).
 - **Diagramme** : un clic sur la carte affiche un mini-diagramme (température et précipitations horaires) pour la commune la plus proche du point cliqué, à partir des mêmes données que l'onglet « Prévisions générales ».
 
-Radiosondage et coupes verticales ne sont pas encore disponibles : ces vues nécessitent les niveaux de pression ARPEGE (paquet **IP1**), que le pipeline ne télécharge pas encore — seuls SP1/SP2/HP1 (champs de surface) sont utilisés aujourd'hui.
+Radiosondage et coupes verticales (visualisation carte/graphique du profil complet) ne sont pas encore disponibles : depuis la v1.3.0, le paquet **IP1** est bien téléchargé et exploité (cf. plus haut), mais uniquement pour les tableaux par commune, pas pour de nouvelles couches cartographiques ou un rendu de profil vertical.

@@ -60,7 +60,18 @@ except ImportError:  # pragma: no cover - modules toujours livrés ensemble
 
 
 LOGGER = logging.getLogger("arpege.france")
-PIPELINE_VERSION = "1.2.1"
+PIPELINE_VERSION = "1.3.0"
+GRAVITY_MS2 = 9.80665
+# Niveaux isobares réellement présents dans le paquet IP1 (100 à 1000 hPa,
+# vérifié le 08/09/2026 sur un fichier réel) : on ne retient que ceux utiles
+# à l'onglet Tempête / haute altitude du comparateur (850-500 hPa) plus
+# 1000 hPa, nécessaire au calcul de l'épaisseur 1000-500.
+ISOBARIC_LEVELS_HPA = (1000, 850, 800, 700, 600, 500)
+ISOBARIC_POINT_ONLY_FIELDS = frozenset(
+    f"{prefix}_{level}_{suffix}"
+    for prefix, suffix in (("temperature", "k"), ("geopotential", "gpm"))
+    for level in ISOBARIC_LEVELS_HPA
+)
 DATASET_API = (
     "https://www.data.gouv.fr/api/1/datasets/"
     "paquets-arpege-resolution-0-1deg/"
@@ -166,6 +177,18 @@ VALUE_COLUMNS = (
     "geopotential_500_m",
     "vertical_velocity_500_pas",
     "cin_jkg",
+    # Champs isobares ajoutés v1.3.0, extraits directement du paquet IP1
+    # (data.gouv.fr, gratuit) : contrairement aux champs ci-dessus, ceux-là
+    # sont bien renseignés sur la source de secours (pas seulement via
+    # l'API Météo-France payante). Cf. message_field() plus bas.
+    "temperature_800_c",
+    "temperature_700_c",
+    "temperature_600_c",
+    "geopotential_800_m",
+    "geopotential_700_m",
+    "geopotential_600_m",
+    "thickness_1000_500_dam",
+    "freezing_level_m",
 )
 
 INTEGER_COLUMNS = {
@@ -199,6 +222,11 @@ INTEGER_COLUMNS = {
     "geopotential_850_m",
     "geopotential_500_m",
     "cin_jkg",
+    "geopotential_800_m",
+    "geopotential_700_m",
+    "geopotential_600_m",
+    "thickness_1000_500_dam",
+    "freezing_level_m",
 }
 
 MAP_FIELDS = {
@@ -672,6 +700,27 @@ def choose_resources(
         for key, resource in selection.items()
         if key[0] in ("SP1", "SP2") and key[1] <= forecast_hours
     }
+    # IP1 (niveaux isobares, v1.3.0) est ajouté en best-effort : contrairement
+    # à SP1/SP2, son absence ou son incomplétude temporaire ne doit pas faire
+    # échouer tout le run — les champs d'altitude resteront simplement à null
+    # pour cette publication (cf. message_field/transform_step), comme avant
+    # v1.3.0.
+    ip1_spans = [(ls, le) for (g, ls, le) in selection if g == "IP1"]
+    if _covers_range(ip1_spans, forecast_hours):
+        chosen.update(
+            {
+                key: resource
+                for key, resource in selection.items()
+                if key[0] == "IP1" and key[1] <= forecast_hours
+            }
+        )
+    else:
+        LOGGER.warning(
+            "Paquets IP1 (niveaux de pression) incomplets ou absents pour le "
+            "run %s : température/géopotentiel 850-500 hPa resteront "
+            "indisponibles pour cette publication.",
+            run_text,
+        )
     return chosen, parse_run_text(None if run_text == "local" else run_text)
 
 
@@ -796,9 +845,23 @@ def message_field(gid: int) -> str | None:
     technique Météo-France des paquets ARPEGE (SP1/SP2, EURAT01 0,1°) ne les
     liste pas — ils étaient toujours absents des GRIB2 réels et restaient
     silencieusement à NaN. Cf. README pour le détail des paquets.
+
+    v1.3.0 : reconnaît aussi les messages isobares du paquet IP1 (température
+    ``t`` et géopotentiel ``z``, ``typeOfLevel == "isobaricInhPa"``) pour les
+    niveaux listés dans ``ISOBARIC_LEVELS_HPA``. Vérifié le 08/09/2026 sur un
+    fichier IP1 réel avec eccodes : ``t`` et ``z`` y existent bien de 100 à
+    1000 hPa (contrairement à AROME 0,01°, qui ne publie aucun paquet
+    isobare — seulement HP1, des niveaux d'altitude, pas de pression).
     """
 
     short_name = str(safe_get(gid, "shortName", ""))
+    if short_name in ("t", "z") and str(safe_get(gid, "typeOfLevel", "")) == "isobaricInhPa":
+        level = int(safe_get(gid, "level", -1))
+        if level in ISOBARIC_LEVELS_HPA:
+            return (
+                f"temperature_{level}_k" if short_name == "t" else f"geopotential_{level}_gpm"
+            )
+        return None
     direct = {
         "2t": "temperature_k",
         "2r": "humidity_pct",
@@ -1030,13 +1093,28 @@ def parse_grib_files(
                     bucket["valid_time"] = bucket["valid_time"] or grib_datetime(
                         gid, "validityDate", "validityTime"
                     )
-                    bucket["values"][field] = grid.extract(gid)
-                    map_array = map_sampler.extract(gid, grid)
-                    bucket["map_values"][field] = (
-                        spill.store(lead_hour, field, map_array)
-                        if spill is not None
-                        else map_array
-                    )
+                    values = grid.extract(gid)
+                    if field.startswith("geopotential_") and field.endswith("_gpm"):
+                        # IP1 fournit le géopotentiel réel (m²/s²), pas la
+                        # hauteur géopotentielle : on convertit ici pour que
+                        # transform_step() reçoive directement des mètres,
+                        # comme le fait déjà arpege_api_source.py côté API.
+                        values = values / GRAVITY_MS2
+                    bucket["values"][field] = values
+                    if field not in ISOBARIC_POINT_ONLY_FIELDS:
+                        # Les niveaux isobares (v1.3.0) ne servent qu'aux
+                        # tableaux par commune (onglet Tempête) : inutile de
+                        # payer le rééchantillonnage pleine résolution pour
+                        # de nouvelles couches carte non demandées, alors que
+                        # l'ajout de champs SP1/SP2 en v1.1.0 avait déjà fait
+                        # dépasser la RAM du runner GitHub Actions (cf.
+                        # MapValueSpill ci-dessus).
+                        map_array = map_sampler.extract(gid, grid)
+                        bucket["map_values"][field] = (
+                            spill.store(lead_hour, field, map_array)
+                            if spill is not None
+                            else map_array
+                        )
                 finally:
                     codes_release(gid)
 
@@ -1190,11 +1268,14 @@ def transform_step(
         array_like(raw, "thermal_radiation_down_wm2", shape), 0.0
     )
 
-    # Champs d'altitude ajoutés en v1.2.0, fournis uniquement par la source
-    # API officielle Météo-France (ARPEGE-005-EURAT-WCS) : absents de
-    # data.gouv.fr, ils restent à NaN (donc les couches correspondantes ne
-    # sont tout simplement pas publiées) tant que le run n'a pas été produit
-    # via l'API. Cf. arpege_api_source.py pour la résolution des indicateurs.
+    # Champs d'altitude ajoutés en v1.2.0. temperature_850/500 et
+    # geopotential_850/500 sont alimentés soit par l'API officielle
+    # Météo-France (ARPEGE-005-EURAT-WCS, cf. arpege_api_source.py), soit —
+    # depuis v1.3.0 — directement par le paquet IP1 gratuit de data.gouv.fr
+    # (cf. message_field()), qui publie en fait tous les niveaux 100-1000 hPa
+    # sur la grille EURAT01. temperature_300/wind_speed_300/humidity_850-500/
+    # wind_speed_100m restent, eux, exclusifs à l'API (IP1 ne les couvre pas
+    # tel qu'exploité ici) : ils restent à NaN hors run API.
     temperature_850 = array_like(raw, "temperature_850_k", shape) - 273.15
     temperature_500 = array_like(raw, "temperature_500_k", shape) - 273.15
     temperature_300 = array_like(raw, "temperature_300_k", shape) - 273.15
@@ -1221,6 +1302,64 @@ def transform_step(
     geopotential_500 = array_like(raw, "geopotential_500_gpm", shape)
     vertical_velocity_500 = array_like(raw, "vertical_velocity_500_pas", shape)
     cin = np.maximum(array_like(raw, "cin_jkg", shape), 0.0)
+
+    # Niveaux 800/700/600 hPa ajoutés v1.3.0 (IP1 uniquement, cf. plus haut).
+    temperature_800 = array_like(raw, "temperature_800_k", shape) - 273.15
+    temperature_700 = array_like(raw, "temperature_700_k", shape) - 273.15
+    temperature_600 = array_like(raw, "temperature_600_k", shape) - 273.15
+    geopotential_800 = array_like(raw, "geopotential_800_gpm", shape)
+    geopotential_700 = array_like(raw, "geopotential_700_gpm", shape)
+    geopotential_600 = array_like(raw, "geopotential_600_gpm", shape)
+    geopotential_1000 = array_like(raw, "geopotential_1000_gpm", shape)
+
+    # Épaisseur 1000-500 hPa (dam) : proportionnelle à la température moyenne
+    # de la couche, utilisée pour distinguer pluie/neige en altitude.
+    thickness_1000_500 = (geopotential_500 - geopotential_1000) / 10.0
+
+    # Iso 0°C (m) : interpolation linéaire de l'altitude où la température
+    # traverse 0°C entre deux niveaux adjacents du profil vertical dont on
+    # dispose (1000/850/800/700/600/500 hPa). Si le profil ne traverse pas
+    # 0°C dans cette plage (isotherme 0° trop basse ou trop haute), la valeur
+    # reste NaN — pas d'extrapolation fantôme.
+    profile_levels_hpa = (1000, 850, 800, 700, 600, 500)
+    profile_temperature = {
+        1000: array_like(raw, "temperature_1000_k", shape) - 273.15,
+        850: temperature_850,
+        800: temperature_800,
+        700: temperature_700,
+        600: temperature_600,
+        500: temperature_500,
+    }
+    profile_geopotential = {
+        1000: geopotential_1000,
+        850: geopotential_850,
+        800: geopotential_800,
+        700: geopotential_700,
+        600: geopotential_600,
+        500: geopotential_500,
+    }
+    freezing_level = np.full(shape, np.nan)
+    found = np.zeros(shape, dtype=bool)
+    for lower_hpa, upper_hpa in zip(profile_levels_hpa, profile_levels_hpa[1:]):
+        t_lower = profile_temperature[lower_hpa]
+        t_upper = profile_temperature[upper_hpa]
+        z_lower = profile_geopotential[lower_hpa]
+        z_upper = profile_geopotential[upper_hpa]
+        crosses = (
+            ~found
+            & np.isfinite(t_lower)
+            & np.isfinite(t_upper)
+            & np.isfinite(z_lower)
+            & np.isfinite(z_upper)
+            & (t_lower >= 0.0)
+            & (t_upper < 0.0)
+        )
+        span = t_lower - t_upper
+        safe_span = np.where(span > 1.0e-6, span, 1.0)
+        fraction = np.clip(t_lower / safe_span, 0.0, 1.0)
+        interpolated = z_lower + fraction * (z_upper - z_lower)
+        freezing_level = np.where(crosses, interpolated, freezing_level)
+        found = found | crosses
 
     precipitation, rain_total = accumulation(
         raw,
@@ -1432,6 +1571,16 @@ def transform_step(
         "geopotential_500_m": rounded(geopotential_500, 0),
         "vertical_velocity_500_pas": rounded(vertical_velocity_500, 3),
         "cin_jkg": rounded(cin, 0),
+        # Champs isobares v1.3.0 (IP1, cf. plus haut) : mode Tempête / haute
+        # altitude du comparateur de modèles.
+        "temperature_800_c": rounded(temperature_800, 1),
+        "temperature_700_c": rounded(temperature_700, 1),
+        "temperature_600_c": rounded(temperature_600, 1),
+        "geopotential_800_m": rounded(geopotential_800, 0),
+        "geopotential_700_m": rounded(geopotential_700, 0),
+        "geopotential_600_m": rounded(geopotential_600, 0),
+        "thickness_1000_500_dam": rounded(thickness_1000_500, 0),
+        "freezing_level_m": rounded(freezing_level, 0),
     }
     state = {
         "rain_total": rain_total,
